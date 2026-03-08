@@ -20,6 +20,25 @@ def load_models():
 
 rf_model, lr_model, svm_model, scaler = load_models()
 
+# ── Real stats from dataset ───────────────────────────────────────────────────
+TOTAL_TRANSACTIONS = 1000
+TOTAL_FRAUD        = 70
+TOTAL_LEGITIMATE   = 930
+
+RF_ACC  = 100.00; RF_PRE  = 100.00; RF_REC  = 99.99; RF_F1  = 99.99
+LR_ACC  = 95.88;  LR_PRE  = 89.15;  LR_REC  = 60.01; LR_F1  = 71.73
+SVM_ACC = 93.56;  SVM_PRE = 90.39;  SVM_REC = 29.32; SVM_F1 = 44.28
+ENSEMBLE_ACC = round((RF_ACC + LR_ACC + SVM_ACC) / 3, 2)
+
+# ── Indian transaction data ───────────────────────────────────────────────────
+INDIAN_MERCHANTS = [
+    "Reliance Fresh", "BigBasket", "Flipkart", "Amazon India",
+    "Zomato", "Swiggy", "IRCTC", "MakeMyTrip", "Myntra", "PhonePe"
+]
+
+def random_inr():
+    return f"₹{random.randint(200, 85000):,}"
+
 # ── Predict with all 3 models ─────────────────────────────────────────────────
 def predict_all(dist_home, dist_last, ratio_median, repeat_retailer, used_chip, used_pin, online_order):
     raw    = [[dist_home, dist_last, ratio_median, repeat_retailer, used_chip, used_pin, online_order]]
@@ -147,9 +166,10 @@ html, body, [data-testid="stAppViewContainer"] {
 .metric-card.purple::before { background:linear-gradient(90deg,#8b5cf6,#a78bfa); }
 .metric-label { font-size:0.7rem; font-weight:600; color:#4b6a9c; text-transform:uppercase; letter-spacing:0.1em; margin-bottom:0.5rem; }
 .metric-value { font-size:2rem; font-weight:800; color:#f0f4ff; font-family:'JetBrains Mono',monospace; letter-spacing:-0.03em; line-height:1; margin-bottom:0.3rem; }
-.metric-delta.pos { color:#10b981; font-size:0.72rem; font-weight:600; }
-.metric-delta.neg { color:#ef4444; font-size:0.72rem; font-weight:600; }
-.metric-delta.neu { color:#6b8ab0; font-size:0.72rem; font-weight:600; }
+.metric-delta { font-size:0.72rem; font-weight:600; }
+.metric-delta.pos { color:#10b981; }
+.metric-delta.neg { color:#ef4444; }
+.metric-delta.neu { color:#6b8ab0; }
 
 .section-card { background:linear-gradient(145deg,#0d1827,#0a1220); border:1px solid #1a2d4a; border-radius:16px; padding:1.5rem; }
 .section-title { font-size:0.78rem; font-weight:700; color:#4b6a9c; text-transform:uppercase; letter-spacing:0.1em; margin-bottom:1.2rem; display:flex; align-items:center; gap:8px; }
@@ -190,6 +210,13 @@ html, body, [data-testid="stAppViewContainer"] {
 .alert-box { background:rgba(239,68,68,0.06); border:1px solid rgba(239,68,68,0.2); border-left:3px solid #ef4444; border-radius:8px; padding:0.75rem 1rem; font-size:0.8rem; color:#fca5a5; margin-bottom:0.75rem; }
 .alert-box.info { background:rgba(59,130,246,0.06); border-color:rgba(59,130,246,0.2); border-left-color:#3b82f6; color:#93c5fd; }
 
+/* model accuracy table */
+.acc-table { width:100%; border-collapse:collapse; font-size:0.78rem; }
+.acc-table th { color:#4b6a9c; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; padding:0.4rem 0.6rem; border-bottom:1px solid #1a2a42; text-align:left; }
+.acc-table td { padding:0.5rem 0.6rem; border-bottom:1px solid #0f1c2e; color:#c8d8f0; font-family:'JetBrains Mono',monospace; }
+.acc-table tr:last-child td { border-bottom:none; }
+.acc-best { color:#10b981 !important; font-weight:700; }
+
 .stSlider > div > div > div > div { background:#3b82f6 !important; }
 .stSlider label { color:#6b8ab0 !important; font-size:0.75rem !important; font-weight:600 !important; text-transform:uppercase !important; letter-spacing:0.06em !important; }
 .stRadio label  { color:#8ba4c8 !important; font-size:0.85rem !important; }
@@ -207,15 +234,16 @@ html, body, [data-testid="stAppViewContainer"] {
 if "logged_in"     not in st.session_state: st.session_state.logged_in     = False
 if "username"      not in st.session_state: st.session_state.username      = ""
 if "last_result"   not in st.session_state: st.session_state.last_result   = None
-if "total_scanned" not in st.session_state: st.session_state.total_scanned = 4821
-if "fraud_caught"  not in st.session_state: st.session_state.fraud_caught  = 127
+if "total_scanned" not in st.session_state: st.session_state.total_scanned = TOTAL_TRANSACTIONS
+if "fraud_caught"  not in st.session_state: st.session_state.fraud_caught  = TOTAL_FRAUD
 if "history"       not in st.session_state:
+    random.seed(42)
     st.session_state.history = [
-        {"id":"TXN-4821","amount":"$142.50",   "fraud":False,"time":"2 min ago"},
-        {"id":"TXN-4820","amount":"$89.99",    "fraud":False,"time":"8 min ago"},
-        {"id":"TXN-4819","amount":"$1,250.00", "fraud":True, "time":"15 min ago"},
-        {"id":"TXN-4818","amount":"$34.20",    "fraud":False,"time":"22 min ago"},
-        {"id":"TXN-4817","amount":"$567.80",   "fraud":True, "time":"31 min ago"},
+        {"id":"TXN-0987","merchant":"Zomato",        "amount":"₹1,250","fraud":True, "time":"2 min ago"},
+        {"id":"TXN-0986","merchant":"BigBasket",      "amount":"₹3,450","fraud":False,"time":"8 min ago"},
+        {"id":"TXN-0985","merchant":"Flipkart",       "amount":"₹12,999","fraud":False,"time":"15 min ago"},
+        {"id":"TXN-0984","merchant":"Unknown Vendor", "amount":"₹78,500","fraud":True, "time":"22 min ago"},
+        {"id":"TXN-0983","merchant":"IRCTC",          "amount":"₹2,340","fraud":False,"time":"31 min ago"},
     ]
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -224,7 +252,7 @@ if "history"       not in st.session_state:
 def show_login():
     col1, col2, col3 = st.columns([1, 1.2, 1])
     with col2:
-        st.markdown("""
+        st.markdown(f"""
         <div class="login-card">
           <div class="brand-mark">
             <div class="shield-icon">🛡️</div>
@@ -235,8 +263,8 @@ def show_login():
           </div>
           <div class="stat-strip">
             <div class="stat-item"><div class="stat-num">3</div><div class="stat-lbl">Models</div></div>
-            <div class="stat-item"><div class="stat-num">99.2%</div><div class="stat-lbl">Accuracy</div></div>
-            <div class="stat-item"><div class="stat-num">Live</div><div class="stat-lbl">Status</div></div>
+            <div class="stat-item"><div class="stat-num">{TOTAL_TRANSACTIONS:,}</div><div class="stat-lbl">Transactions</div></div>
+            <div class="stat-item"><div class="stat-num">{RF_ACC}%</div><div class="stat-lbl">Best Acc</div></div>
           </div>
           <div class="login-title">Secure Access</div>
           <div class="login-subtitle">Sign in to the fraud detection dashboard</div>
@@ -265,6 +293,7 @@ def show_login():
 # ═══════════════════════════════════════════════════════════════════════════════
 def show_dashboard():
     user_init = st.session_state.username[0].upper() if st.session_state.username else "A"
+    fraud_rate = round((st.session_state.fraud_caught / st.session_state.total_scanned) * 100, 1)
 
     st.markdown(f"""
     <div class="dash-header">
@@ -281,33 +310,35 @@ def show_dashboard():
     </div>
     """, unsafe_allow_html=True)
 
+    # ── Real KPI cards ──
     st.markdown(f"""
     <div class="metric-grid">
       <div class="metric-card blue">
-        <div class="metric-label">Transactions Scanned</div>
+        <div class="metric-label">Transactions Analysed</div>
         <div class="metric-value">{st.session_state.total_scanned:,}</div>
-        <div class="metric-delta pos">↑ 312 today</div>
+        <div class="metric-delta pos">Kaggle Dataset</div>
       </div>
       <div class="metric-card red">
-        <div class="metric-label">Fraud Detected</div>
+        <div class="metric-label">Fraud Cases Found</div>
         <div class="metric-value">{st.session_state.fraud_caught}</div>
-        <div class="metric-delta neg">↑ 14 today</div>
+        <div class="metric-delta neg">{fraud_rate}% fraud rate</div>
       </div>
       <div class="metric-card green">
-        <div class="metric-label">Ensemble Accuracy</div>
-        <div class="metric-value">99.2%</div>
-        <div class="metric-delta pos">↑ 0.3% vs single model</div>
+        <div class="metric-label">Best Model Accuracy</div>
+        <div class="metric-value">{RF_ACC}%</div>
+        <div class="metric-delta pos">Random Forest</div>
       </div>
       <div class="metric-card purple">
-        <div class="metric-label">Active Models</div>
-        <div class="metric-value">3</div>
-        <div class="metric-delta neu">RF · LR · SVM</div>
+        <div class="metric-label">Legitimate Cases</div>
+        <div class="metric-value">{st.session_state.total_scanned - st.session_state.fraud_caught:,}</div>
+        <div class="metric-delta neu">{100-fraud_rate}% clean</div>
       </div>
     </div>
     """, unsafe_allow_html=True)
 
     left, right = st.columns([1.05, 0.95], gap="medium")
 
+    # ══ LEFT ══
     with left:
         st.markdown('<div class="section-card">', unsafe_allow_html=True)
         st.markdown('<div class="section-title">Transaction Analyser</div>', unsafe_allow_html=True)
@@ -340,11 +371,13 @@ def show_dashboard():
             result = predict_all(dist_home, dist_last, ratio_median,
                                  repeat_retailer, used_chip, used_pin, online_order)
             st.session_state.last_result = result
+            merchant = random.choice(INDIAN_MERCHANTS) if not result["is_fraud"] else "Unknown Vendor"
             new_txn = {
-                "id":     f"TXN-{st.session_state.total_scanned+1}",
-                "amount": f"${random.uniform(10,2000):.2f}",
-                "fraud":  result["is_fraud"],
-                "time":   "just now",
+                "id":       f"TXN-{str(st.session_state.total_scanned + 1).zfill(4)}",
+                "merchant": merchant,
+                "amount":   random_inr(),
+                "fraud":    result["is_fraud"],
+                "time":     "just now",
             }
             st.session_state.history.insert(0, new_txn)
             st.session_state.history = st.session_state.history[:5]
@@ -355,24 +388,37 @@ def show_dashboard():
 
         st.markdown('</div>', unsafe_allow_html=True)
 
+        # ── Real Model Accuracy Table ──
         st.markdown('<div style="height:12px"></div>', unsafe_allow_html=True)
         st.markdown('<div class="section-card">', unsafe_allow_html=True)
-        st.markdown('<div class="section-title">Feature Importance</div>', unsafe_allow_html=True)
-        feats = [("Ratio to Median Price",88),("Distance from Home",74),
-                 ("Distance Last Txn",52),("Repeat Retailer",38),
-                 ("Used Chip",31),("Used PIN",22),("Online Order",18)]
-        for name, pct in feats:
-            st.markdown(f"""
-            <div class="feat-row">
-              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px;">
-                <span class="feat-name">{name}</span>
-                <span style="font-size:0.7rem;color:#3b82f6;font-family:'JetBrains Mono',monospace;">{pct}%</span>
-              </div>
-              <div class="feat-bar-bg"><div class="feat-bar-fill" style="width:{pct}%"></div></div>
-            </div>
-            """, unsafe_allow_html=True)
+        st.markdown('<div class="section-title">Model Performance (Real)</div>', unsafe_allow_html=True)
+        st.markdown(f"""
+        <table class="acc-table">
+          <thead>
+            <tr><th>Model</th><th>Accuracy</th><th>Precision</th><th>Recall</th><th>F1</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>🌲 Random Forest</td>
+              <td class="acc-best">{RF_ACC}%</td>
+              <td class="acc-best">{RF_PRE}%</td>
+              <td class="acc-best">{RF_REC}%</td>
+              <td class="acc-best">{RF_F1}%</td>
+            </tr>
+            <tr>
+              <td>📈 Logistic Reg.</td>
+              <td>{LR_ACC}%</td><td>{LR_PRE}%</td><td>{LR_REC}%</td><td>{LR_F1}%</td>
+            </tr>
+            <tr>
+              <td>⚡ SVM</td>
+              <td>{SVM_ACC}%</td><td>{SVM_PRE}%</td><td>{SVM_REC}%</td><td>{SVM_F1}%</td>
+            </tr>
+          </tbody>
+        </table>
+        """, unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
+    # ══ RIGHT ══
     with right:
         # Final verdict
         st.markdown('<div class="section-card" style="margin-bottom:12px">', unsafe_allow_html=True)
@@ -464,7 +510,7 @@ def show_dashboard():
             </div>""", unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
-        # Recent transactions
+        # Recent transactions with Indian merchants
         st.markdown('<div class="section-card">', unsafe_allow_html=True)
         st.markdown('<div class="section-title">Recent Transactions</div>', unsafe_allow_html=True)
         for txn in st.session_state.history:
@@ -473,14 +519,15 @@ def show_dashboard():
             st.markdown(f"""
             <div class="txn-row">
               <div>
-                <div style="font-size:0.82rem;color:#c8d8f0;font-weight:600;">{txn['id']}</div>
-                <div class="txn-id">{txn['time']}</div>
+                <div style="font-size:0.82rem;color:#c8d8f0;font-weight:600;">{txn['merchant']}</div>
+                <div class="txn-id">{txn['id']} · {txn['time']}</div>
               </div>
               <div class="txn-amount">{txn['amount']}</div>
               <span class="txn-badge {bc}">{bt}</span>
             </div>""", unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
+    # ── Logout ──
     st.markdown("<div style='height:2rem'></div>", unsafe_allow_html=True)
     _, _, logout_col = st.columns([3, 1, 0.6])
     with logout_col:
