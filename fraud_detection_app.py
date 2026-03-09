@@ -6,6 +6,79 @@ import pandas as pd
 import pickle
 from datetime import datetime
 
+# ── Loading screen ────────────────────────────────────────────────────────────
+def show_loading_screen():
+    st.markdown("""
+    <style>
+    .loading-wrapper {
+        display: flex; flex-direction: column; align-items: center;
+        justify-content: center; min-height: 80vh; text-align: center;
+    }
+    .loading-shield {
+        font-size: 4rem; margin-bottom: 1.5rem;
+        animation: pulse-shield 1.5s infinite;
+    }
+    @keyframes pulse-shield {
+        0%, 100% { transform: scale(1); opacity: 1; }
+        50%       { transform: scale(1.1); opacity: 0.8; }
+    }
+    .loading-title {
+        font-size: 2rem; font-weight: 800; color: #f0f4ff;
+        letter-spacing: -0.02em; margin-bottom: 0.3rem;
+    }
+    .loading-title span { color: #3b82f6; }
+    .loading-sub {
+        font-size: 0.8rem; color: #4b6a9c; letter-spacing: 0.12em;
+        text-transform: uppercase; margin-bottom: 2.5rem;
+    }
+    .loading-bar-bg {
+        width: 300px; height: 4px; background: #0d1827;
+        border-radius: 2px; overflow: hidden; margin: 0 auto 1rem auto;
+        border: 1px solid #1a2a42;
+    }
+    .loading-bar-fill {
+        height: 100%; background: linear-gradient(90deg, #1d4ed8, #3b82f6);
+        border-radius: 2px; animation: loading-progress 3s ease-in-out forwards;
+    }
+    @keyframes loading-progress {
+        0%   { width: 0%; }
+        20%  { width: 25%; }
+        50%  { width: 60%; }
+        80%  { width: 85%; }
+        100% { width: 100%; }
+    }
+    .loading-status {
+        font-size: 0.75rem; color: #3b82f6; font-family: 'JetBrains Mono', monospace;
+        letter-spacing: 0.05em; height: 1.2rem;
+    }
+    .loading-steps {
+        margin-top: 2rem; display: flex; flex-direction: column; gap: 0.5rem;
+        align-items: center;
+    }
+    .loading-step {
+        font-size: 0.72rem; color: #2a3a52; font-family: 'JetBrains Mono', monospace;
+        display: flex; align-items: center; gap: 8px;
+    }
+    .loading-step.done { color: #10b981; }
+    .loading-step.active { color: #3b82f6; }
+    </style>
+    <div class="loading-wrapper">
+      <div class="loading-shield">🛡️</div>
+      <div class="loading-title">Fraud<span>Shield</span></div>
+      <div class="loading-sub">Ensemble Detection System</div>
+      <div class="loading-bar-bg">
+        <div class="loading-bar-fill"></div>
+      </div>
+      <div class="loading-steps">
+        <div class="loading-step done">✓ &nbsp;Secure environment initialised</div>
+        <div class="loading-step done">✓ &nbsp;Dataset verified · 1,000,000 transactions</div>
+        <div class="loading-step active">⟳ &nbsp;Loading ML models (RF · LR · SVM)...</div>
+        <div class="loading-step">○ &nbsp;Calibrating ensemble voting system</div>
+        <div class="loading-step">○ &nbsp;System ready</div>
+      </div>
+    </div>
+    """, unsafe_allow_html=True)
+
 # ── Load models ───────────────────────────────────────────────────────────────
 @st.cache_resource
 def load_models():
@@ -15,7 +88,18 @@ def load_models():
     with open('scaler.pkl',          'rb') as f: scaler = pickle.load(f)
     return rf, lr, svm, scaler
 
-rf_model, lr_model, svm_model, scaler = load_models()
+# Show loading screen while models load on first visit
+if "models_loaded" not in st.session_state:
+    loading_placeholder = st.empty()
+    with loading_placeholder:
+        show_loading_screen()
+    rf_model, lr_model, svm_model, scaler = load_models()
+    time.sleep(1.5)
+    loading_placeholder.empty()
+    st.session_state.models_loaded = True
+    st.rerun()
+else:
+    rf_model, lr_model, svm_model, scaler = load_models()
 
 # ── Real stats ────────────────────────────────────────────────────────────────
 TOTAL_DATASET   = 1000000
