@@ -530,13 +530,13 @@ def page_analyser():
             pct  = int(res["avg"] * 100)
             tier = get_risk_tier(res["avg"])
 
-            # Model disagreement alert
-            if res["uncertain"]:
+            # Model disagreement — only show for MEDIUM risk
+            if tier["tier"] == "MEDIUM":
                 st.markdown(f"""
                 <div class="uncertain-box" style="margin-bottom:0.75rem;">
-                  <div style="font-size:1.5rem;margin-bottom:0.3rem;">⚠️</div>
-                  <div style="font-size:0.7rem;font-weight:800;color:#f59e0b;text-transform:uppercase;letter-spacing:0.12em;margin-bottom:0.3rem;">Models Disagree</div>
-                  <div style="font-size:0.78rem;color:#8ba4c8;">Low confidence — Human review recommended</div>
+                  <div style="font-size:1.5rem;margin-bottom:0.3rem;">🔍</div>
+                  <div style="font-size:0.7rem;font-weight:800;color:#f59e0b;text-transform:uppercase;letter-spacing:0.12em;margin-bottom:0.3rem;">Borderline Case</div>
+                  <div style="font-size:0.78rem;color:#8ba4c8;">Risk score is in uncertain zone — human review recommended</div>
                 </div>""", unsafe_allow_html=True)
 
             # 5-tier verdict card
