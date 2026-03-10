@@ -630,6 +630,83 @@ def page_analyser():
             </div>""", unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
+    # ── Batch CSV Upload ───────────────────────────────────────────────────────
+    st.markdown('<div style="height:0.5rem"></div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-card">', unsafe_allow_html=True)
+    st.markdown('<div class="section-title">Batch CSV Upload — Analyse Multiple Transactions</div>', unsafe_allow_html=True)
+
+    sample_data = """dist_home,dist_last,ratio_median,repeat_retailer,used_chip,used_pin,online_order
+12.5,2.3,1.2,1,1,1,0
+200.0,50.0,8.0,0,0,0,1
+5.1,1.0,0.9,1,1,1,0
+150.0,30.0,6.5,0,0,1,1
+3.2,0.5,1.1,1,1,1,0
+180.0,45.0,7.8,0,0,0,1
+8.0,2.0,1.5,1,1,0,0
+100.0,20.0,5.0,0,1,0,1"""
+
+    st.markdown("""
+    <div style="background:#070b12;border:1px solid #1a2a42;border-radius:10px;padding:1rem;margin-bottom:1rem;">
+      <div style="font-size:0.78rem;color:#8ba4c8;margin-bottom:0.5rem;font-weight:600;">📋 Required CSV columns:</div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:0.7rem;color:#4b6a9c;line-height:1.8;">
+        dist_home · dist_last · ratio_median<br>
+        repeat_retailer · used_chip · used_pin · online_order
+      </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    col_dl, col_up = st.columns([1, 2])
+    with col_dl:
+        st.download_button(label="📥 Download Sample CSV", data=sample_data,
+                           file_name="sample_transactions.csv", mime="text/csv", use_container_width=True)
+    with col_up:
+        uploaded_file = st.file_uploader("Upload your CSV file", type=["csv"], label_visibility="collapsed")
+
+    if uploaded_file is not None:
+        try:
+            df = pd.read_csv(uploaded_file)
+            required_cols = ["dist_home","dist_last","ratio_median","repeat_retailer","used_chip","used_pin","online_order"]
+            if not all(c in df.columns for c in required_cols):
+                st.error("CSV missing required columns. Please use the sample CSV as template.")
+            else:
+                with st.spinner(f"Analysing {len(df)} transactions..."):
+                    results = []
+                    for _, row in df.iterrows():
+                        r    = predict_all(row["dist_home"], row["dist_last"], row["ratio_median"],
+                                           row["repeat_retailer"], row["used_chip"], row["used_pin"], row["online_order"])
+                        tier = get_risk_tier(r["avg"])
+                        results.append({"Risk Tier": tier["tier"], "Risk Score": f"{r['avg']:.3f}",
+                                        "Action": tier["action"],
+                                        "RF Vote": "FRAUD" if r["votes"][0] else "SAFE",
+                                        "LR Vote": "FRAUD" if r["votes"][1] else "SAFE",
+                                        "SVM Vote": "FRAUD" if r["votes"][2] else "SAFE"})
+                total   = len(results)
+                fraud_c = sum(1 for r in results if r["Risk Tier"] in ["CRITICAL","HIGH"])
+                safe_c  = total - fraud_c
+                st.markdown(f"""
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.75rem;margin:1rem 0;">
+                  <div style="background:#070b12;border:1px solid #1a2a42;border-radius:10px;padding:0.75rem;text-align:center;">
+                    <div style="font-size:1.2rem;font-weight:800;color:#3b82f6;font-family:'JetBrains Mono',monospace;">{total}</div>
+                    <div style="font-size:0.65rem;color:#4b6a9c;text-transform:uppercase;margin-top:3px;">Total Analysed</div>
+                  </div>
+                  <div style="background:#070b12;border:1px solid #1a2a42;border-radius:10px;padding:0.75rem;text-align:center;">
+                    <div style="font-size:1.2rem;font-weight:800;color:#ef4444;font-family:'JetBrains Mono',monospace;">{fraud_c}</div>
+                    <div style="font-size:0.65rem;color:#4b6a9c;text-transform:uppercase;margin-top:3px;">High Risk 🚨</div>
+                  </div>
+                  <div style="background:#070b12;border:1px solid #1a2a42;border-radius:10px;padding:0.75rem;text-align:center;">
+                    <div style="font-size:1.2rem;font-weight:800;color:#10b981;font-family:'JetBrains Mono',monospace;">{safe_c}</div>
+                    <div style="font-size:0.65rem;color:#4b6a9c;text-transform:uppercase;margin-top:3px;">Low Risk ✅</div>
+                  </div>
+                </div>""", unsafe_allow_html=True)
+                result_df = pd.DataFrame(results)
+                st.dataframe(result_df, use_container_width=True, height=250)
+                st.download_button(label="📤 Download Results CSV", data=result_df.to_csv(index=False),
+                                   file_name="fraud_results.csv", mime="text/csv", use_container_width=True)
+        except Exception as e:
+            st.error(f"Error reading file: {e}")
+
+    st.markdown('</div>', unsafe_allow_html=True)
+
 # ══════════════════════════════════════════════════════════════════════════════
 #  PAGE 3 — MODEL PERFORMANCE
 # ══════════════════════════════════════════════════════════════════════════════
