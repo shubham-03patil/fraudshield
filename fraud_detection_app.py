@@ -504,7 +504,7 @@ def page_command_center():
     with ctrl2:
         stop_sim  = st.button("⏹  Stop",  key="sim_stop",  use_container_width=True)
     with ctrl3:
-        speed = st.selectbox("Speed", ["Slow (3s)", "Normal (1.5s)", "Fast (0.5s)"], index=1, label_visibility="collapsed")
+        speed = st.selectbox("Speed", ["Slow (15s)", "Normal (8s)", "Fast (4s)"], index=1, label_visibility="collapsed")
     with ctrl4:
         sim_count = len(st.session_state.sim_log)
         fraud_sim = len([t for t in st.session_state.sim_log if t["tier"]["tier"] in ["CRITICAL","HIGH"]])
@@ -516,7 +516,7 @@ def page_command_center():
 
     if start_sim: st.session_state.sim_running = True
     if stop_sim:  st.session_state.sim_running = False
-    speed_map = {"Slow (3s)": 3.0, "Normal (1.5s)": 1.5, "Fast (0.5s)": 0.5}
+    speed_map = {"Slow (15s)": 15.0, "Normal (8s)": 8.0, "Fast (4s)": 4.0}
     sim_speed = speed_map[speed]
 
     # Render sim log
