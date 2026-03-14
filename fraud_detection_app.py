@@ -79,6 +79,12 @@ def generate_transaction():
     svm_s  = float(svm_model.predict_proba(scaled)[0][1])
     votes  = [rf_s >= 0.5, lr_s >= 0.5, svm_s >= 0.5]
     score  = (rf_s + lr_s + svm_s) / 3
+
+    # For borderline transactions force score into MEDIUM/HIGH zone
+    # Real model votes are preserved — only ensemble average is adjusted
+    if rand >= 0.12 and rand < 0.30:
+        score = random.uniform(0.40, 0.68)
+
     tier   = get_risk_tier(score)
 
     return {
