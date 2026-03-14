@@ -486,6 +486,69 @@ def page_command_center():
             st.session_state.last_txn_time = time.time()
             st.rerun()
 
+    # ── Simulation init ────────────────────────────────────────────────────────
+    if "sim_running" not in st.session_state: st.session_state.sim_running = False
+    if "sim_log"     not in st.session_state: st.session_state.sim_log     = []
+
+    # ── Simulation Panel ───────────────────────────────────────────────────────
+    st.markdown("<div style='border-top:1px solid #111d2e;margin:1.5rem 0;'></div>", unsafe_allow_html=True)
+    st.markdown('''<div style="display:flex;align-items:center;gap:10px;margin-bottom:1rem;">
+      <div style="width:10px;height:10px;border-radius:50%;background:#ef4444;animation:pulse-red 1.2s infinite;flex-shrink:0;"></div>
+      <div style="font-size:1rem;font-weight:800;color:#f0f4ff;">Live Simulation Panel</div>
+      <div style="font-size:0.7rem;color:#3a5a7c;">Watch the system process transactions in real time</div>
+    </div>''', unsafe_allow_html=True)
+
+    ctrl1, ctrl2, ctrl3, ctrl4 = st.columns([1, 1, 1.2, 2])
+    with ctrl1:
+        start_sim = st.button("▶  Start", key="sim_start", use_container_width=True)
+    with ctrl2:
+        stop_sim  = st.button("⏹  Stop",  key="sim_stop",  use_container_width=True)
+    with ctrl3:
+        speed = st.selectbox("Speed", ["Slow (3s)", "Normal (1.5s)", "Fast (0.5s)"], index=1, label_visibility="collapsed")
+    with ctrl4:
+        sim_count = len(st.session_state.sim_log)
+        fraud_sim = len([t for t in st.session_state.sim_log if t["tier"]["tier"] in ["CRITICAL","HIGH"]])
+        st.markdown(f'''<div style="background:#070b14;border:1px solid #111d2e;border-radius:10px;padding:0.5rem 1rem;display:flex;gap:1.5rem;align-items:center;">
+          <span style="font-size:0.68rem;color:#3a5a7c;font-weight:700;">PROCESSED: <span style="color:#3b82f6;font-family:JetBrains Mono,monospace;">{sim_count}</span></span>
+          <span style="font-size:0.68rem;color:#3a5a7c;font-weight:700;">FRAUD: <span style="color:#ef4444;font-family:JetBrains Mono,monospace;">{fraud_sim}</span></span>
+          <span style="font-size:0.68rem;color:#3a5a7c;font-weight:700;">CLEAN: <span style="color:#10b981;font-family:JetBrains Mono,monospace;">{sim_count - fraud_sim}</span></span>
+        </div>''', unsafe_allow_html=True)
+
+    if start_sim: st.session_state.sim_running = True
+    if stop_sim:  st.session_state.sim_running = False
+    speed_map = {"Slow (3s)": 3.0, "Normal (1.5s)": 1.5, "Fast (0.5s)": 0.5}
+    sim_speed = speed_map[speed]
+
+    # Render sim log
+    st.markdown("<div style='height:0.75rem'></div>", unsafe_allow_html=True)
+    sim_ph = st.empty()
+
+    def render_sim():
+        if not st.session_state.sim_log:
+            sim_ph.markdown('''<div style="background:#070b14;border:1px dashed #1a2a42;border-radius:14px;padding:2rem;text-align:center;color:#1e3050;font-size:0.82rem;">
+              Press ▶ Start to begin live simulation
+            </div>''', unsafe_allow_html=True)
+            return
+        rows = ""
+        for txn in st.session_state.sim_log[:20]:
+            t = txn["tier"]
+            c = t["color"]; bg = t["bg"]; bd = t["border"]
+            action = txn["status"]
+            ab = "rgba(239,68,68,0.15)" if "Block" in action else ("rgba(16,185,129,0.1)" if "Approv" in action else "rgba(245,158,11,0.1)")
+            rows += f'<div style="display:flex;align-items:center;gap:10px;padding:0.5rem 0.75rem;border-radius:8px;margin-bottom:4px;background:{bg};border:1px solid {bd};"><span style="font-size:1rem;width:22px;text-align:center;">{t["icon"]}</span><span style="font-family:JetBrains Mono,monospace;font-size:0.7rem;color:#3a5a7c;width:95px;">{txn["id"]}</span><span style="font-size:0.8rem;font-weight:700;color:#c8d8f0;flex:1;">{txn["merchant"]}</span><span style="font-family:JetBrains Mono,monospace;font-size:0.78rem;color:#e0e8f5;font-weight:700;width:85px;text-align:right;">{txn["amount"]}</span><span style="font-size:0.65rem;font-weight:700;color:{c};width:65px;text-align:right;">{int(txn["score"]*100)}% risk</span><span style="padding:0.15rem 0.55rem;border-radius:20px;font-size:0.6rem;font-weight:700;background:{ab};color:{c};border:1px solid {bd};">{action}</span><span style="font-size:0.6rem;color:#1e3050;font-family:JetBrains Mono,monospace;width:55px;text-align:right;">{txn["time"]}</span></div>'
+        sim_ph.markdown(f'<div style="background:#070b14;border:1px solid #111d2e;border-radius:14px;padding:1rem;max-height:380px;overflow-y:auto;">{rows}</div>', unsafe_allow_html=True)
+
+    if st.session_state.sim_running:
+        txn = generate_transaction()
+        st.session_state.sim_log.insert(0, txn)
+        st.session_state.sim_log = st.session_state.sim_log[:50]
+        add_transaction()
+        render_sim()
+        time.sleep(sim_speed)
+        st.rerun()
+    else:
+        render_sim()
+
 # ══════════════════════════════════════════════════════════════════════════════
 #  PAGES 2-5 — COMING SOON (built next)
 # ══════════════════════════════════════════════════════════════════════════════
