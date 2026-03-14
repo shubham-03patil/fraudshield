@@ -32,57 +32,75 @@ def get_risk_tier(score):
     elif pct >= 20: return {"tier":"LOW",     "color":"#3b82f6","bg":"rgba(59,130,246,0.12)","border":"rgba(59,130,246,0.3)","action":"Auto Approved","icon":"👁️","auto":True}
     else:           return {"tier":"SAFE",    "color":"#10b981","bg":"rgba(16,185,129,0.12)","border":"rgba(16,185,129,0.3)","action":"Auto Approved","icon":"✅","auto":True}
 
-# ── Predict ────────────────────────────────────────────────────────────────────
-def predict(dist_home, dist_last, ratio_median, repeat_retailer, used_chip, used_pin, online_order):
+def generate_transaction():
+    """Generate a realistic random transaction and score it."""
+    rand = random.random()
+
+    if rand < 0.12:
+        # FRAUD — all signals pointing to fraud
+        dist_home       = random.uniform(80, 400)
+        dist_last       = random.uniform(20, 200)
+        ratio_median    = random.uniform(4.0, 10.0)
+        repeat_retailer = 0
+        used_chip       = 0
+        used_pin        = 0
+        online_order    = 1
+        merchant        = random.choice(SUSPICIOUS_MERCHANTS)
+        amount          = random.randint(15000, 95000)
+
+    elif rand < 0.30:
+        # BORDERLINE — mixed signals, will land in MEDIUM/HIGH
+        dist_home       = random.uniform(30, 80)
+        dist_last       = random.uniform(5, 30)
+        ratio_median    = random.uniform(2.0, 4.5)
+        repeat_retailer = random.randint(0, 1)
+        used_chip       = random.randint(0, 1)
+        used_pin        = 0
+        online_order    = 1
+        merchant        = random.choice(INDIAN_MERCHANTS + SUSPICIOUS_MERCHANTS)
+        amount          = random.randint(8000, 45000)
+
+    else:
+        # SAFE — all signals pointing to legitimate
+        dist_home       = random.uniform(0, 25)
+        dist_last       = random.uniform(0, 8)
+        ratio_median    = random.uniform(0.5, 2.0)
+        repeat_retailer = 1
+        used_chip       = 1
+        used_pin        = 1
+        online_order    = random.randint(0, 1)
+        merchant        = random.choice(INDIAN_MERCHANTS)
+        amount          = random.randint(200, 10000)
+
     raw    = [[dist_home, dist_last, ratio_median, repeat_retailer, used_chip, used_pin, online_order]]
     scaled = scaler.transform(raw)
     rf_s   = float(rf_model.predict_proba(raw)[0][1])
     lr_s   = float(lr_model.predict_proba(scaled)[0][1])
     svm_s  = float(svm_model.predict_proba(scaled)[0][1])
-    avg    = (rf_s + lr_s + svm_s) / 3
-    return avg
-
-def generate_transaction():
-    """Generate a realistic random transaction and score it."""
-    is_fraud_sim = random.random() < 0.12  # 12% fraud rate
-
-    if is_fraud_sim:
-        dist_home      = random.uniform(80, 400)
-        dist_last      = random.uniform(20, 200)
-        ratio_median   = random.uniform(4.0, 10.0)
-        repeat_retailer = 0
-        used_chip      = 0
-        used_pin       = random.randint(0, 1)
-        online_order   = 1
-        merchant       = random.choice(SUSPICIOUS_MERCHANTS)
-        amount         = random.randint(15000, 95000)
-    else:
-        dist_home      = random.uniform(0, 30)
-        dist_last      = random.uniform(0, 10)
-        ratio_median   = random.uniform(0.5, 2.5)
-        repeat_retailer = 1
-        used_chip      = 1
-        used_pin       = 1
-        online_order   = random.randint(0, 1)
-        merchant       = random.choice(INDIAN_MERCHANTS)
-        amount         = random.randint(200, 12000)
-
-    score = predict(dist_home, dist_last, ratio_median,
-                    repeat_retailer, used_chip, used_pin, online_order)
-    tier  = get_risk_tier(score)
+    votes  = [rf_s >= 0.5, lr_s >= 0.5, svm_s >= 0.5]
+    score  = (rf_s + lr_s + svm_s) / 3
+    tier   = get_risk_tier(score)
 
     return {
-        "id":       f"TXN-{random.randint(10000,99999)}",
-        "merchant": merchant,
-        "amount":   f"₹{amount:,}",
-        "amount_val": amount,
-        "score":    score,
-        "tier":     tier,
-        "time":     datetime.now().strftime("%H:%M:%S"),
-        "timestamp": time.time(),
-        "status":   "Open" if not tier["auto"] else tier["action"],
-        "auto":     tier["auto"],
-        "notes":    "",
+        "id":              f"TXN-{random.randint(10000,99999)}",
+        "merchant":        merchant,
+        "amount":          f"₹{amount:,}",
+        "amount_val":      amount,
+        "score":           score,
+        "votes":           votes,
+        "tier":            tier,
+        "time":            datetime.now().strftime("%H:%M:%S"),
+        "timestamp":       time.time(),
+        "status":          "Open" if not tier["auto"] else tier["action"],
+        "auto":            tier["auto"],
+        "notes":           "",
+        "card":            f"**** **** **** {random.randint(1000,9999)}",
+        "dist_home":       dist_home,
+        "used_chip":       used_chip,
+        "used_pin":        used_pin,
+        "online_order":    online_order,
+        "repeat_retailer": repeat_retailer,
+        "rule_triggered":  "",
     }
 
 # ── Page config ────────────────────────────────────────────────────────────────
@@ -363,20 +381,43 @@ def show_stats_bar():
 # ══════════════════════════════════════════════════════════════════════════════
 #  PAGE 1 — COMMAND CENTER
 # ══════════════════════════════════════════════════════════════════════════════
+def get_city(dist_home):
+    if dist_home < 10:   return "Mumbai Local"
+    elif dist_home < 25: return "Thane / Navi Mumbai"
+    elif dist_home < 50: return "Pune"
+    elif dist_home < 100:return "Nashik"
+    else:                return "Unknown Location 🚨"
+
+def get_elapsed(timestamp):
+    secs = int(time.time() - timestamp)
+    if secs < 10:   return "just now"
+    elif secs < 60: return f"{secs}s ago"
+    elif secs < 3600: return f"{secs//60}m ago"
+    else:           return f"{secs//3600}h ago"
+
+def get_flags(txn):
+    flags = []
+    if not txn.get("used_chip",1):       flags.append("No Chip")
+    if not txn.get("used_pin",1):        flags.append("No PIN")
+    if txn.get("online_order",0):        flags.append("Online")
+    if not txn.get("repeat_retailer",1): flags.append("Unknown Merchant")
+    return " · ".join(flags) if flags else "All checks passed"
+
 def page_command_center():
     st.markdown("""
     <div class="page-header">
       <div class="page-title">🏠 Command <span>Center</span></div>
-      <div class="page-sub">Live transaction monitoring — all decisions happen automatically in real time</div>
+      <div class="page-sub">Live transaction monitoring — 95% of decisions are fully automatic</div>
     </div>""", unsafe_allow_html=True)
 
     show_stats_bar()
 
-    # Auto-generate new transaction every 10 seconds
-    now = time.time()
-    if now - st.session_state.last_txn_time >= 10:
-        add_transaction()
-        st.session_state.last_txn_time = now
+    # Session init
+    if "sim_running"  not in st.session_state: st.session_state.sim_running  = False
+    if "sim_log"      not in st.session_state: st.session_state.sim_log      = []
+    if "feed_paused"  not in st.session_state: st.session_state.feed_paused  = False
+    if "feed_filter"  not in st.session_state: st.session_state.feed_filter  = "All"
+    if "sim_speed"    not in st.session_state: st.session_state.sim_speed    = 8.0
 
     # Critical notification banner
     if st.session_state.last_notif:
@@ -386,168 +427,171 @@ def page_command_center():
           <span style="font-size:1.4rem;">🚨</span>
           <div>
             <div class="notif-text">CRITICAL — Auto Blocked: {n['merchant']} · {n['amount']}</div>
-            <div class="notif-sub">Risk Score: {int(n['score']*100)}% · {n['time']} · Transaction ID: {n['id']}</div>
+            <div class="notif-sub">Risk: {int(n['score']*100)}% · {n['time']} · {n['id']} · 📱 SMS Alert sent to fraud team</div>
           </div>
         </div>""", unsafe_allow_html=True)
 
-    col1, col2 = st.columns([1.4, 0.6], gap="medium")
+    col1, col2 = st.columns([1.5, 0.5], gap="medium")
 
     with col1:
         st.markdown('<div class="section-card">', unsafe_allow_html=True)
         st.markdown('<div class="section-title">Live Transaction Feed</div>', unsafe_allow_html=True)
 
-        if not st.session_state.feed:
-            st.markdown('<div style="text-align:center;padding:2rem;color:#1e3050;font-size:0.82rem;">Waiting for transactions...</div>', unsafe_allow_html=True)
+        # Apply filter
+        feed = st.session_state.feed
+        filt = st.session_state.feed_filter
+        if filt == "Critical Only":
+            feed = [t for t in feed if t["tier"]["tier"] == "CRITICAL"]
+        elif filt == "High Risk":
+            feed = [t for t in feed if t["tier"]["tier"] == "HIGH"]
+        elif filt == "Queue Only":
+            feed = [t for t in feed if not t["auto"]]
+        elif filt == "Safe Only":
+            feed = [t for t in feed if t["tier"]["tier"] in ["SAFE","LOW"]]
+
+        if not feed:
+            st.markdown('<div style="text-align:center;padding:2rem;color:#1e3050;font-size:0.82rem;">No transactions match filter — try changing the filter below</div>', unsafe_allow_html=True)
         else:
-            for txn in st.session_state.feed[:15]:
-                tier      = txn["tier"]
-                tier_name = tier["tier"].lower()
-                color     = tier["color"]
-                bg        = tier["bg"]
-                border    = tier["border"]
+            for txn in feed[:15]:
+                t      = txn["tier"]
+                color  = t["color"]
+                bg     = t["bg"]
+                border = t["border"]
+                city   = get_city(txn.get("dist_home", 5))
+                elapsed= get_elapsed(txn.get("timestamp", time.time()))
+                flags  = get_flags(txn)
+                card   = txn.get("card", "**** **** **** 0000")
+                action = txn["status"]
+                rule   = txn.get("rule_triggered", "")
+                # Model votes
+                votes  = txn.get("votes", [False, False, False])
+                v_icons= ["🔴" if v else "🟢" for v in votes]
+                rule_html = f'<div style="font-size:0.62rem;color:#f59e0b;margin-top:3px;">🔒 Rule: {rule}</div>' if rule else ""
                 st.markdown(f"""
-                <div class="feed-row {tier_name}">
-                  <span class="feed-icon">{tier['icon']}</span>
-                  <div style="flex:1;min-width:0;">
-                    <div class="feed-merchant">{txn['merchant']}</div>
-                    <div class="feed-id">{txn['id']} · {txn['time']}</div>
+                <div style="background:{bg};border:1px solid {border};border-radius:10px;padding:0.75rem 1rem;margin-bottom:6px;">
+                  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;">
+                    <div style="display:flex;align-items:center;gap:8px;">
+                      <span style="font-size:1.1rem;">{t['icon']}</span>
+                      <div>
+                        <span style="font-size:0.88rem;font-weight:700;color:#c8d8f0;">{txn['merchant']}</span>
+                        <span style="font-size:0.65rem;color:#3a5a7c;margin-left:8px;font-family:'JetBrains Mono',monospace;">{txn['id']}</span>
+                      </div>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:10px;">
+                      <span style="font-size:0.9rem;font-weight:700;font-family:'JetBrains Mono',monospace;color:#e0e8f5;">{txn['amount']}</span>
+                      <span style="padding:0.18rem 0.6rem;border-radius:20px;font-size:0.62rem;font-weight:700;background:{bg};color:{color};border:1px solid {border};">{action}</span>
+                    </div>
                   </div>
-                  <div style="text-align:right;margin-right:10px;">
-                    <div class="feed-amount">{txn['amount']}</div>
-                    <div style="font-size:0.62rem;color:{color};font-weight:700;">{int(txn['score']*100)}% risk</div>
+                  <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+                    <span style="font-size:0.65rem;color:#3a5a7c;font-family:'JetBrains Mono',monospace;">💳 {card}</span>
+                    <span style="font-size:0.65rem;color:#3a5a7c;">📍 {city}</span>
+                    <span style="font-size:0.65rem;color:#3a5a7c;">🕐 {elapsed}</span>
+                    <span style="font-size:0.65rem;color:#3a5a7c;">RF:{v_icons[0]} LR:{v_icons[1]} SVM:{v_icons[2]}</span>
+                    <span style="font-size:0.65rem;color:{color};font-weight:700;">{int(txn['score']*100)}% risk</span>
+                    <span style="font-size:0.65rem;color:#2a3a52;">· {flags}</span>
                   </div>
-                  <span class="feed-badge" style="background:{bg};color:{color};border:1px solid {border};">{txn['status']}</span>
+                  {rule_html}
                 </div>""", unsafe_allow_html=True)
 
         st.markdown('</div>', unsafe_allow_html=True)
 
     with col2:
-        # Automation breakdown
         auto_approved = len([t for t in st.session_state.feed if t["tier"]["tier"] in ["SAFE","LOW"]])
-        auto_blocked  = len([t for t in st.session_state.feed if t["tier"]["tier"] == "CRITICAL" and t["auto"]])
+        auto_blocked  = len([t for t in st.session_state.feed if t["tier"]["tier"] == "CRITICAL"])
         sent_queue    = len([t for t in st.session_state.feed if not t["auto"]])
+        total_feed    = max(len(st.session_state.feed), 1)
+        auto_rate     = round((auto_approved + auto_blocked) / total_feed * 100)
 
         st.markdown('<div class="section-card">', unsafe_allow_html=True)
-        st.markdown('<div class="section-title">Automation Breakdown</div>', unsafe_allow_html=True)
+        st.markdown('<div class="section-title">Automation</div>', unsafe_allow_html=True)
         st.markdown(f"""
         <div class="auto-grid">
-          <div class="auto-card">
-            <div class="auto-num" style="color:#10b981;">{auto_approved}</div>
-            <div class="auto-lbl">Auto Approved</div>
-          </div>
-          <div class="auto-card">
-            <div class="auto-num" style="color:#ef4444;">{auto_blocked}</div>
-            <div class="auto-lbl">Auto Blocked</div>
-          </div>
-          <div class="auto-card">
-            <div class="auto-num" style="color:#f59e0b;">{sent_queue}</div>
-            <div class="auto-lbl">Sent to Queue</div>
-          </div>
+          <div class="auto-card"><div class="auto-num" style="color:#10b981;">{auto_approved}</div><div class="auto-lbl">Approved</div></div>
+          <div class="auto-card"><div class="auto-num" style="color:#ef4444;">{auto_blocked}</div><div class="auto-lbl">Blocked</div></div>
+          <div class="auto-card"><div class="auto-num" style="color:#f59e0b;">{sent_queue}</div><div class="auto-lbl">To Queue</div></div>
         </div>
-        <div style="margin-top:1rem;">
-          <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
-            <span style="font-size:0.68rem;color:#3a5a7c;font-weight:700;">AUTOMATION RATE</span>
-            <span style="font-size:0.78rem;font-family:'JetBrains Mono',monospace;color:#10b981;font-weight:700;">
-              {round((auto_approved+auto_blocked)/max(len(st.session_state.feed),1)*100)}%
-            </span>
+        <div style="margin-top:0.85rem;">
+          <div style="display:flex;justify-content:space-between;margin-bottom:3px;">
+            <span style="font-size:0.62rem;color:#3a5a7c;font-weight:700;text-transform:uppercase;">Auto Rate</span>
+            <span style="font-size:0.72rem;font-family:'JetBrains Mono',monospace;color:#10b981;font-weight:700;">{auto_rate}%</span>
           </div>
           <div style="height:8px;background:#070b14;border-radius:4px;border:1px solid #111d2e;overflow:hidden;">
-            <div style="height:100%;width:{round((auto_approved+auto_blocked)/max(len(st.session_state.feed),1)*100)}%;background:linear-gradient(90deg,#10b981,#3b82f6);border-radius:4px;"></div>
+            <div style="height:100%;width:{auto_rate}%;background:linear-gradient(90deg,#10b981,#3b82f6);border-radius:4px;"></div>
           </div>
-        </div>
-        """, unsafe_allow_html=True)
+        </div>""", unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
-        # Risk tier distribution
         tier_counts = {"CRITICAL":0,"HIGH":0,"MEDIUM":0,"LOW":0,"SAFE":0}
-        for t in st.session_state.feed:
-            tier_counts[t["tier"]["tier"]] += 1
-
+        for t in st.session_state.feed: tier_counts[t["tier"]["tier"]] += 1
         st.markdown('<div class="section-card">', unsafe_allow_html=True)
         st.markdown('<div class="section-title">Risk Distribution</div>', unsafe_allow_html=True)
-        for tier_name, color in [("CRITICAL","#ef4444"),("HIGH","#f97316"),("MEDIUM","#f59e0b"),("LOW","#3b82f6"),("SAFE","#10b981")]:
-            count = tier_counts[tier_name]
-            pct   = round(count / max(len(st.session_state.feed), 1) * 100)
+        for tn, col in [("CRITICAL","#ef4444"),("HIGH","#f97316"),("MEDIUM","#f59e0b"),("LOW","#3b82f6"),("SAFE","#10b981")]:
+            cnt = tier_counts[tn]
+            pct = round(cnt / total_feed * 100)
             st.markdown(f"""
-            <div style="margin-bottom:0.6rem;">
-              <div style="display:flex;justify-content:space-between;margin-bottom:3px;">
-                <span style="font-size:0.68rem;color:{color};font-weight:700;">{tier_name}</span>
-                <span style="font-size:0.68rem;font-family:'JetBrains Mono',monospace;color:#3a5a7c;">{count}</span>
+            <div style="margin-bottom:0.55rem;">
+              <div style="display:flex;justify-content:space-between;margin-bottom:2px;">
+                <span style="font-size:0.62rem;color:{col};font-weight:700;">{tn}</span>
+                <span style="font-size:0.62rem;font-family:'JetBrains Mono',monospace;color:#3a5a7c;">{cnt}</span>
               </div>
-              <div style="height:6px;background:#070b14;border-radius:3px;border:1px solid #111d2e;overflow:hidden;">
-                <div style="height:100%;width:{pct}%;background:{color};border-radius:3px;opacity:0.8;"></div>
+              <div style="height:5px;background:#070b14;border-radius:3px;overflow:hidden;">
+                <div style="height:100%;width:{pct}%;background:{col};border-radius:3px;opacity:0.85;"></div>
               </div>
             </div>""", unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
-        # Refresh button
-        if st.button("🔄  Refresh Feed", use_container_width=True):
-            add_transaction()
-            st.session_state.last_txn_time = time.time()
+    # ── Controls Bar ────────────────────────────────────────────────────────────
+    st.markdown("<div style='border-top:1px solid #111d2e;margin:1rem 0 0.75rem;'></div>", unsafe_allow_html=True)
+
+    c1, c2, c3, c4, c5, c6, c7 = st.columns([1, 1, 1.3, 0.3, 1, 1, 1])
+    with c1:
+        if st.button("⏸  Pause" if not st.session_state.feed_paused else "▶  Resume", key="pause_btn", use_container_width=True):
+            st.session_state.feed_paused = not st.session_state.feed_paused
+            st.rerun()
+    with c2:
+        speed_sel = st.selectbox("Speed", ["Slow (15s)", "Normal (8s)", "Fast (4s)"], index=1, label_visibility="collapsed")
+        speed_map = {"Slow (15s)": 15.0, "Normal (8s)": 8.0, "Fast (4s)": 4.0}
+        st.session_state.sim_speed = speed_map[speed_sel]
+    with c3:
+        filt_sel = st.selectbox("Filter", ["All", "Critical Only", "High Risk", "Queue Only", "Safe Only"], label_visibility="collapsed")
+        st.session_state.feed_filter = filt_sel
+    with c4:
+        st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
+    with c5:
+        sim_count = len(st.session_state.feed)
+        fraud_sim = len([t for t in st.session_state.feed if t["tier"]["tier"] in ["CRITICAL","HIGH"]])
+        st.markdown(f"""
+        <div style="background:#070b14;border:1px solid #111d2e;border-radius:10px;padding:0.45rem 0.75rem;font-size:0.65rem;color:#3a5a7c;">
+          <span style="font-weight:700;">Total: </span><span style="color:#3b82f6;font-family:'JetBrains Mono',monospace;">{sim_count}</span>
+          &nbsp;&nbsp;<span style="font-weight:700;">Fraud: </span><span style="color:#ef4444;font-family:'JetBrains Mono',monospace;">{fraud_sim}</span>
+          &nbsp;&nbsp;<span style="font-weight:700;">Clean: </span><span style="color:#10b981;font-family:'JetBrains Mono',monospace;">{sim_count-fraud_sim}</span>
+        </div>""", unsafe_allow_html=True)
+
+    # ── Auto tick ──────────────────────────────────────────────────────────────
+    if not st.session_state.feed_paused:
+        now = time.time()
+        if now - st.session_state.last_txn_time >= st.session_state.sim_speed:
+            txn = generate_transaction()
+            txn["card"] = f"**** **** **** {random.randint(1000,9999)}"
+            txn["dist_home"] = txn.get("dist_home", random.uniform(0,200))
+            tier = txn["tier"]
+            if tier["auto"]:
+                txn["status"] = tier["action"]
+                if tier["tier"] == "CRITICAL":
+                    st.session_state.fraud_blocked += 1
+                    st.session_state.money_saved   += txn["amount_val"]
+                    st.session_state.last_notif     = txn
+                    st.session_state.audit_log.insert(0, {**txn, "decision":"Auto Blocked","analyst":"System","resolved_at":txn["time"]})
+            else:
+                txn["status"] = "Pending"
+                st.session_state.alert_queue.insert(0, txn)
+                st.session_state.alert_queue = st.session_state.alert_queue[:50]
+            st.session_state.feed.insert(0, txn)
+            st.session_state.feed        = st.session_state.feed[:30]
+            st.session_state.total_today += 1
+            st.session_state.last_txn_time = now
             st.rerun()
 
-    # ── Simulation init ────────────────────────────────────────────────────────
-    if "sim_running" not in st.session_state: st.session_state.sim_running = False
-    if "sim_log"     not in st.session_state: st.session_state.sim_log     = []
-
-    # ── Simulation Panel ───────────────────────────────────────────────────────
-    st.markdown("<div style='border-top:1px solid #111d2e;margin:1.5rem 0;'></div>", unsafe_allow_html=True)
-    st.markdown('''<div style="display:flex;align-items:center;gap:10px;margin-bottom:1rem;">
-      <div style="width:10px;height:10px;border-radius:50%;background:#ef4444;animation:pulse-red 1.2s infinite;flex-shrink:0;"></div>
-      <div style="font-size:1rem;font-weight:800;color:#f0f4ff;">Live Simulation Panel</div>
-      <div style="font-size:0.7rem;color:#3a5a7c;">Watch the system process transactions in real time</div>
-    </div>''', unsafe_allow_html=True)
-
-    ctrl1, ctrl2, ctrl3, ctrl4 = st.columns([1, 1, 1.2, 2])
-    with ctrl1:
-        start_sim = st.button("▶  Start", key="sim_start", use_container_width=True)
-    with ctrl2:
-        stop_sim  = st.button("⏹  Stop",  key="sim_stop",  use_container_width=True)
-    with ctrl3:
-        speed = st.selectbox("Speed", ["Slow (15s)", "Normal (8s)", "Fast (4s)"], index=1, label_visibility="collapsed")
-    with ctrl4:
-        sim_count = len(st.session_state.sim_log)
-        fraud_sim = len([t for t in st.session_state.sim_log if t["tier"]["tier"] in ["CRITICAL","HIGH"]])
-        st.markdown(f'''<div style="background:#070b14;border:1px solid #111d2e;border-radius:10px;padding:0.5rem 1rem;display:flex;gap:1.5rem;align-items:center;">
-          <span style="font-size:0.68rem;color:#3a5a7c;font-weight:700;">PROCESSED: <span style="color:#3b82f6;font-family:JetBrains Mono,monospace;">{sim_count}</span></span>
-          <span style="font-size:0.68rem;color:#3a5a7c;font-weight:700;">FRAUD: <span style="color:#ef4444;font-family:JetBrains Mono,monospace;">{fraud_sim}</span></span>
-          <span style="font-size:0.68rem;color:#3a5a7c;font-weight:700;">CLEAN: <span style="color:#10b981;font-family:JetBrains Mono,monospace;">{sim_count - fraud_sim}</span></span>
-        </div>''', unsafe_allow_html=True)
-
-    if start_sim: st.session_state.sim_running = True
-    if stop_sim:  st.session_state.sim_running = False
-    speed_map = {"Slow (15s)": 15.0, "Normal (8s)": 8.0, "Fast (4s)": 4.0}
-    sim_speed = speed_map[speed]
-
-    # Render sim log
-    st.markdown("<div style='height:0.75rem'></div>", unsafe_allow_html=True)
-    sim_ph = st.empty()
-
-    def render_sim():
-        if not st.session_state.sim_log:
-            sim_ph.markdown('''<div style="background:#070b14;border:1px dashed #1a2a42;border-radius:14px;padding:2rem;text-align:center;color:#1e3050;font-size:0.82rem;">
-              Press ▶ Start to begin live simulation
-            </div>''', unsafe_allow_html=True)
-            return
-        rows = ""
-        for txn in st.session_state.sim_log[:20]:
-            t = txn["tier"]
-            c = t["color"]; bg = t["bg"]; bd = t["border"]
-            action = txn["status"]
-            ab = "rgba(239,68,68,0.15)" if "Block" in action else ("rgba(16,185,129,0.1)" if "Approv" in action else "rgba(245,158,11,0.1)")
-            rows += f'<div style="display:flex;align-items:center;gap:10px;padding:0.5rem 0.75rem;border-radius:8px;margin-bottom:4px;background:{bg};border:1px solid {bd};"><span style="font-size:1rem;width:22px;text-align:center;">{t["icon"]}</span><span style="font-family:JetBrains Mono,monospace;font-size:0.7rem;color:#3a5a7c;width:95px;">{txn["id"]}</span><span style="font-size:0.8rem;font-weight:700;color:#c8d8f0;flex:1;">{txn["merchant"]}</span><span style="font-family:JetBrains Mono,monospace;font-size:0.78rem;color:#e0e8f5;font-weight:700;width:85px;text-align:right;">{txn["amount"]}</span><span style="font-size:0.65rem;font-weight:700;color:{c};width:65px;text-align:right;">{int(txn["score"]*100)}% risk</span><span style="padding:0.15rem 0.55rem;border-radius:20px;font-size:0.6rem;font-weight:700;background:{ab};color:{c};border:1px solid {bd};">{action}</span><span style="font-size:0.6rem;color:#1e3050;font-family:JetBrains Mono,monospace;width:55px;text-align:right;">{txn["time"]}</span></div>'
-        sim_ph.markdown(f'<div style="background:#070b14;border:1px solid #111d2e;border-radius:14px;padding:1rem;max-height:380px;overflow-y:auto;">{rows}</div>', unsafe_allow_html=True)
-
-    if st.session_state.sim_running:
-        txn = generate_transaction()
-        st.session_state.sim_log.insert(0, txn)
-        st.session_state.sim_log = st.session_state.sim_log[:50]
-        add_transaction()
-        render_sim()
-        time.sleep(sim_speed)
-        st.rerun()
-    else:
-        render_sim()
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  PAGES 2-5 — COMING SOON (built next)
@@ -572,14 +616,6 @@ if not st.session_state.logged_in:
     show_login()
 else:
     show_sidebar()
-
-    # Auto-refresh every 10 seconds on Command Center
-    if st.session_state.page == "Command Center":
-        now = time.time()
-        if now - st.session_state.last_txn_time >= 10:
-            add_transaction()
-            st.session_state.last_txn_time = now
-            st.rerun()
 
     page = st.session_state.page
     if   page == "Command Center": page_command_center()
