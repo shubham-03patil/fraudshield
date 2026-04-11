@@ -634,17 +634,7 @@ def page_coming_soon(name, icon, desc):
 # ══════════════════════════════════════════════════════════════════════════════
 #  ROUTER
 # ══════════════════════════════════════════════════════════════════════════════
-if not st.session_state.logged_in:
-    show_login()
-else:
-    show_sidebar()
 
-    page = st.session_state.page
-    if   page == "Command Center": page_command_center()
-    elif page == "Alert Queue":    page_alert_queue()
-    elif page == "Case Manager":   page_case_manager()
-    elif page == "Rules Engine":   page_rules_engine()
-    elif page == "Audit Log":      page_audit_log()
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1047,3 +1037,18 @@ def page_audit_log():
             </div>""", unsafe_allow_html=True)
 
     st.markdown('</div>', unsafe_allow_html=True)
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  ROUTER
+# ══════════════════════════════════════════════════════════════════════════════
+if not st.session_state.logged_in:
+    show_login()
+else:
+    show_sidebar()
+
+    page = st.session_state.page
+    if   page == "Command Center": page_command_center()
+    elif page == "Alert Queue":    page_alert_queue()
+    elif page == "Case Manager":   page_case_manager()
+    elif page == "Rules Engine":   page_rules_engine()
+    elif page == "Audit Log":      page_audit_log()
