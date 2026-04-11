@@ -443,17 +443,19 @@ def page_command_center():
         st.markdown('<div class="section-card">', unsafe_allow_html=True)
         st.markdown('<div class="section-title">Live Transaction Feed</div>', unsafe_allow_html=True)
 
-        # Apply filter
+        # Apply search or filter
         feed = st.session_state.feed
-        filt = st.session_state.feed_filter
-        if filt == "Critical Only":
-            feed = [t for t in feed if t["tier"]["tier"] == "CRITICAL"]
-        elif filt == "High Risk":
-            feed = [t for t in feed if t["tier"]["tier"] == "HIGH"]
-        elif filt == "Queue Only":
-            feed = [t for t in feed if not t["auto"]]
-        elif filt == "Safe Only":
-            feed = [t for t in feed if t["tier"]["tier"] in ["SAFE","LOW"]]
+        search_q = search if 'search' in dir() else ""
+        if search_q:
+            feed = [t for t in feed if search_q.lower() in t["id"].lower()
+                    or search_q.lower() in t["merchant"].lower()]
+        else:
+            filt = st.session_state.feed_filter
+            if filt == "Critical":  feed = [t for t in feed if t["tier"]["tier"] == "CRITICAL"]
+            elif filt == "High":    feed = [t for t in feed if t["tier"]["tier"] == "HIGH"]
+            elif filt == "Medium":  feed = [t for t in feed if t["tier"]["tier"] == "MEDIUM"]
+            elif filt == "Queue":   feed = [t for t in feed if not t["auto"]]
+            elif filt == "Safe":    feed = [t for t in feed if t["tier"]["tier"] in ["SAFE","LOW"]]
 
         if not feed:
             st.markdown('<div style="text-align:center;padding:2rem;color:#1e3050;font-size:0.82rem;">No transactions match filter — try changing the filter below</div>', unsafe_allow_html=True)
@@ -549,29 +551,43 @@ def page_command_center():
     # ── Controls Bar ────────────────────────────────────────────────────────────
     st.markdown("<div style='border-top:1px solid #111d2e;margin:1rem 0 0.75rem;'></div>", unsafe_allow_html=True)
 
-    c1, c2, c3, c4, c5, c6, c7 = st.columns([1, 1, 1.3, 0.3, 1, 1, 1])
-    with c1:
-        if st.button("⏸  Pause" if not st.session_state.feed_paused else "▶  Resume", key="pause_btn", use_container_width=True):
+    # Row 1 — Pause / Speed / Stats
+    r1, r2, r3 = st.columns([1, 1.3, 2])
+    with r1:
+        pause_label = "▶  Resume" if st.session_state.feed_paused else "⏸  Pause"
+        if st.button(pause_label, key="pause_btn", use_container_width=True):
             st.session_state.feed_paused = not st.session_state.feed_paused
             st.rerun()
-    with c2:
+    with r2:
         speed_sel = st.selectbox("Speed", ["Slow (15s)", "Normal (8s)", "Fast (4s)"], index=1, label_visibility="collapsed")
         speed_map = {"Slow (15s)": 15.0, "Normal (8s)": 8.0, "Fast (4s)": 4.0}
         st.session_state.sim_speed = speed_map[speed_sel]
-    with c3:
-        filt_sel = st.selectbox("Filter", ["All", "Critical Only", "High Risk", "Queue Only", "Safe Only"], label_visibility="collapsed")
-        st.session_state.feed_filter = filt_sel
-    with c4:
-        st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
-    with c5:
+    with r3:
         sim_count = len(st.session_state.feed)
         fraud_sim = len([t for t in st.session_state.feed if t["tier"]["tier"] in ["CRITICAL","HIGH"]])
         st.markdown(f"""
-        <div style="background:#070b14;border:1px solid #111d2e;border-radius:10px;padding:0.45rem 0.75rem;font-size:0.65rem;color:#3a5a7c;">
-          <span style="font-weight:700;">Total: </span><span style="color:#3b82f6;font-family:'JetBrains Mono',monospace;">{sim_count}</span>
-          &nbsp;&nbsp;<span style="font-weight:700;">Fraud: </span><span style="color:#ef4444;font-family:'JetBrains Mono',monospace;">{fraud_sim}</span>
-          &nbsp;&nbsp;<span style="font-weight:700;">Clean: </span><span style="color:#10b981;font-family:'JetBrains Mono',monospace;">{sim_count-fraud_sim}</span>
+        <div style="background:#070b14;border:1px solid #111d2e;border-radius:10px;padding:0.45rem 0.75rem;font-size:0.65rem;color:#3a5a7c;display:flex;gap:1.5rem;align-items:center;height:38px;">
+          <span>Total: <span style="color:#3b82f6;font-family:'JetBrains Mono',monospace;font-weight:700;">{sim_count}</span></span>
+          <span>Fraud: <span style="color:#ef4444;font-family:'JetBrains Mono',monospace;font-weight:700;">{fraud_sim}</span></span>
+          <span>Clean: <span style="color:#10b981;font-family:'JetBrains Mono',monospace;font-weight:700;">{sim_count-fraud_sim}</span></span>
         </div>""", unsafe_allow_html=True)
+
+    st.markdown("<div style='height:0.4rem'></div>", unsafe_allow_html=True)
+
+    # Row 2 — Search bar
+    if "search_query" not in st.session_state: st.session_state.search_query = ""
+    search = st.text_input("search", placeholder="🔍  Search by TXN ID or Merchant name...", label_visibility="collapsed")
+
+    st.markdown("<div style='height:0.4rem'></div>", unsafe_allow_html=True)
+
+    # Row 3 — Filter pills
+    filters = ["All", "Critical", "High", "Medium", "Queue", "Safe"]
+    pcols = st.columns(len(filters))
+    for i, f in enumerate(filters):
+        with pcols[i]:
+            if st.button(f, key=f"fp_{f}", use_container_width=True):
+                st.session_state.feed_filter = f
+                st.rerun()
 
     # ── Auto tick ──────────────────────────────────────────────────────────────
     if not st.session_state.feed_paused:
@@ -625,7 +641,409 @@ else:
 
     page = st.session_state.page
     if   page == "Command Center": page_command_center()
-    elif page == "Alert Queue":    page_coming_soon("Alert Queue",  "🚨", "MEDIUM and HIGH risk transactions awaiting analyst decision")
-    elif page == "Case Manager":   page_coming_soon("Case Manager", "📋", "Full case investigation and resolution workflow")
-    elif page == "Rules Engine":   page_coming_soon("Rules Engine", "🔒", "Set custom rules on top of the ML layer")
-    elif page == "Audit Log":      page_coming_soon("Audit Log",    "📄", "Every decision logged automatically")
+    elif page == "Alert Queue":    page_alert_queue()
+    elif page == "Case Manager":   page_case_manager()
+    elif page == "Rules Engine":   page_rules_engine()
+    elif page == "Audit Log":      page_audit_log()
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  PAGE 2 — ALERT QUEUE
+# ══════════════════════════════════════════════════════════════════════════════
+def page_alert_queue():
+    show_stats_bar()
+    st.markdown("""
+    <div class="page-header">
+      <div class="page-title">🚨 Alert <span>Queue</span></div>
+      <div class="page-sub">MEDIUM and HIGH risk transactions awaiting analyst decision</div>
+    </div>""", unsafe_allow_html=True)
+
+    pending  = [t for t in st.session_state.alert_queue if t["status"] == "Pending"]
+    reviewed = [t for t in st.session_state.alert_queue if t["status"] != "Pending"]
+
+    # Summary
+    st.markdown(f"""
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;margin-bottom:1.5rem;">
+      <div class="stat-card amber">
+        <div class="stat-label">Pending Review</div>
+        <div class="stat-value amber">{len(pending)}</div>
+        <div class="stat-sub">Awaiting analyst action</div>
+      </div>
+      <div class="stat-card red">
+        <div class="stat-label">High Risk</div>
+        <div class="stat-value red">{len([t for t in pending if t['tier']['tier']=='HIGH'])}</div>
+        <div class="stat-sub">Needs urgent attention</div>
+      </div>
+      <div class="stat-card blue">
+        <div class="stat-label">Medium Risk</div>
+        <div class="stat-value blue">{len([t for t in pending if t['tier']['tier']=='MEDIUM'])}</div>
+        <div class="stat-sub">Borderline cases</div>
+      </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    if not pending:
+        st.markdown("""
+        <div style="background:#070b14;border:1px dashed #1a2a42;border-radius:16px;padding:3rem;text-align:center;">
+          <div style="font-size:2.5rem;margin-bottom:0.75rem;">✅</div>
+          <div style="font-size:1rem;font-weight:700;color:#10b981;margin-bottom:0.3rem;">Queue is clear!</div>
+          <div style="font-size:0.8rem;color:#3a5a7c;">All transactions have been reviewed. New alerts will appear here automatically.</div>
+        </div>""", unsafe_allow_html=True)
+    else:
+        for i, txn in enumerate(pending):
+            t      = txn["tier"]
+            color  = t["color"]
+            bg     = t["bg"]
+            border = t["border"]
+            city   = get_city(txn.get("dist_home", 5))
+            elapsed= get_elapsed(txn.get("timestamp", time.time()))
+            flags  = get_flags(txn)
+            card   = txn.get("card", "**** **** **** 0000")
+            votes  = txn.get("votes", [False, False, False])
+            v_icons= ["🔴" if v else "🟢" for v in votes]
+
+            with st.container():
+                st.markdown(f"""
+                <div style="background:{bg};border:1px solid {border};border-radius:14px;padding:1.25rem;margin-bottom:1rem;">
+                  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;">
+                    <div style="display:flex;align-items:center;gap:10px;">
+                      <span style="font-size:1.3rem;">{t['icon']}</span>
+                      <div>
+                        <div style="font-size:0.95rem;font-weight:800;color:#f0f4ff;">{txn['merchant']}</div>
+                        <div style="font-size:0.65rem;color:#3a5a7c;font-family:'JetBrains Mono',monospace;">{txn['id']} · {elapsed}</div>
+                      </div>
+                    </div>
+                    <div style="text-align:right;">
+                      <div style="font-size:1.1rem;font-weight:800;color:#e0e8f5;font-family:'JetBrains Mono',monospace;">{txn['amount']}</div>
+                      <div style="font-size:0.72rem;font-weight:700;color:{color};">{t['tier']} RISK · {int(txn['score']*100)}%</div>
+                    </div>
+                  </div>
+                  <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:0.75rem;">
+                    <span style="font-size:0.65rem;color:#3a5a7c;">💳 {card}</span>
+                    <span style="font-size:0.65rem;color:#3a5a7c;">📍 {city}</span>
+                    <span style="font-size:0.65rem;color:#3a5a7c;">RF:{v_icons[0]} LR:{v_icons[1]} SVM:{v_icons[2]}</span>
+                    <span style="font-size:0.65rem;color:#3a5a7c;">⚠️ {flags}</span>
+                  </div>
+                </div>""", unsafe_allow_html=True)
+
+                # Note input + action buttons
+                note = st.text_input("Analyst note (optional)", placeholder="e.g. Customer called to confirm transaction...", key=f"note_{txn['id']}", label_visibility="collapsed")
+                b1, b2, b3 = st.columns(3)
+                with b1:
+                    if st.button(f"✅ Approve", key=f"approve_{txn['id']}_{i}", use_container_width=True):
+                        txn["status"]      = "Approved"
+                        txn["notes"]       = note
+                        txn["analyst"]     = st.session_state.username
+                        txn["resolved_at"] = datetime.now().strftime("%H:%M:%S")
+                        st.session_state.cases.insert(0, {**txn, "case_status": "Resolved"})
+                        st.session_state.audit_log.insert(0, {**txn, "decision": "Approved", "analyst": st.session_state.username, "resolved_at": txn["resolved_at"]})
+                        st.session_state.alert_queue = [t for t in st.session_state.alert_queue if t["id"] != txn["id"]]
+                        st.rerun()
+                with b2:
+                    if st.button(f"🚫 Block", key=f"block_{txn['id']}_{i}", use_container_width=True):
+                        txn["status"]      = "Blocked"
+                        txn["notes"]       = note
+                        txn["analyst"]     = st.session_state.username
+                        txn["resolved_at"] = datetime.now().strftime("%H:%M:%S")
+                        st.session_state.fraud_blocked += 1
+                        st.session_state.money_saved   += txn["amount_val"]
+                        st.session_state.cases.insert(0, {**txn, "case_status": "Resolved"})
+                        st.session_state.audit_log.insert(0, {**txn, "decision": "Blocked", "analyst": st.session_state.username, "resolved_at": txn["resolved_at"]})
+                        st.session_state.alert_queue = [t for t in st.session_state.alert_queue if t["id"] != txn["id"]]
+                        st.rerun()
+                with b3:
+                    if st.button(f"🔼 Escalate", key=f"escalate_{txn['id']}_{i}", use_container_width=True):
+                        txn["status"]      = "Escalated"
+                        txn["notes"]       = note
+                        txn["analyst"]     = st.session_state.username
+                        txn["resolved_at"] = datetime.now().strftime("%H:%M:%S")
+                        st.session_state.cases.insert(0, {**txn, "case_status": "Investigating"})
+                        st.session_state.audit_log.insert(0, {**txn, "decision": "Escalated", "analyst": st.session_state.username, "resolved_at": txn["resolved_at"]})
+                        st.session_state.alert_queue = [t for t in st.session_state.alert_queue if t["id"] != txn["id"]]
+                        st.rerun()
+                st.markdown("<div style='height:0.25rem'></div>", unsafe_allow_html=True)
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  PAGE 3 — CASE MANAGER
+# ══════════════════════════════════════════════════════════════════════════════
+def page_case_manager():
+    show_stats_bar()
+    st.markdown("""
+    <div class="page-header">
+      <div class="page-title">📋 Case <span>Manager</span></div>
+      <div class="page-sub">Full investigation history — all analyst decisions and escalated cases</div>
+    </div>""", unsafe_allow_html=True)
+
+    cases = st.session_state.cases
+    resolved    = [c for c in cases if c.get("case_status") == "Resolved"]
+    investing   = [c for c in cases if c.get("case_status") == "Investigating"]
+
+    # Summary
+    st.markdown(f"""
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;margin-bottom:1.5rem;">
+      <div class="stat-card blue">
+        <div class="stat-label">Total Cases</div>
+        <div class="stat-value blue">{len(cases)}</div>
+        <div class="stat-sub">All time</div>
+      </div>
+      <div class="stat-card amber">
+        <div class="stat-label">Investigating</div>
+        <div class="stat-value amber">{len(investing)}</div>
+        <div class="stat-sub">Escalated cases</div>
+      </div>
+      <div class="stat-card green">
+        <div class="stat-label">Resolved</div>
+        <div class="stat-value green">{len(resolved)}</div>
+        <div class="stat-sub">Closed cases</div>
+      </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Filter
+    f1, f2, f3 = st.columns(3)
+    with f1:
+        if st.button("All Cases", key="cm_all", use_container_width=True):
+            st.session_state["cm_filter"] = "All"
+            st.rerun()
+    with f2:
+        if st.button("🔍 Investigating", key="cm_inv", use_container_width=True):
+            st.session_state["cm_filter"] = "Investigating"
+            st.rerun()
+    with f3:
+        if st.button("✅ Resolved", key="cm_res", use_container_width=True):
+            st.session_state["cm_filter"] = "Resolved"
+            st.rerun()
+
+    if "cm_filter" not in st.session_state: st.session_state["cm_filter"] = "All"
+    filt = st.session_state["cm_filter"]
+    if filt == "Investigating": display_cases = investing
+    elif filt == "Resolved":    display_cases = resolved
+    else:                       display_cases = cases
+
+    st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
+
+    if not display_cases:
+        st.markdown("""
+        <div style="background:#070b14;border:1px dashed #1a2a42;border-radius:16px;padding:3rem;text-align:center;">
+          <div style="font-size:2.5rem;margin-bottom:0.75rem;">📋</div>
+          <div style="font-size:0.9rem;color:#3a5a7c;">No cases yet — decisions made in Alert Queue will appear here.</div>
+        </div>""", unsafe_allow_html=True)
+    else:
+        for case in display_cases[:20]:
+            t          = case["tier"]
+            color      = t["color"]
+            bg         = t["bg"]
+            border     = t["border"]
+            status     = case.get("case_status","Resolved")
+            decision   = case.get("status","—")
+            analyst    = case.get("analyst","System")
+            resolved_at= case.get("resolved_at","—")
+            notes      = case.get("notes","")
+            city       = get_city(case.get("dist_home", 5))
+            votes      = case.get("votes", [False,False,False])
+            v_icons    = ["🔴" if v else "🟢" for v in votes]
+            flags      = get_flags(case)
+            s_color    = "#f59e0b" if status == "Investigating" else "#10b981"
+
+            st.markdown(f"""
+            <div style="background:{bg};border:1px solid {border};border-radius:14px;padding:1.25rem;margin-bottom:0.75rem;">
+              <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:0.6rem;">
+                <div style="display:flex;align-items:center;gap:10px;">
+                  <span style="font-size:1.2rem;">{t['icon']}</span>
+                  <div>
+                    <div style="font-size:0.9rem;font-weight:800;color:#f0f4ff;">{case['merchant']}</div>
+                    <div style="font-size:0.65rem;color:#3a5a7c;font-family:'JetBrains Mono',monospace;">{case['id']} · 📍 {city}</div>
+                  </div>
+                </div>
+                <div style="text-align:right;">
+                  <div style="font-size:0.95rem;font-weight:800;color:#e0e8f5;font-family:'JetBrains Mono',monospace;">{case['amount']}</div>
+                  <div style="font-size:0.65rem;color:{color};font-weight:700;">{t['tier']} · {int(case['score']*100)}% risk</div>
+                </div>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:0.5rem;margin-bottom:0.6rem;">
+                <div style="background:#070b14;border:1px solid #111d2e;border-radius:8px;padding:0.5rem;text-align:center;">
+                  <div style="font-size:0.6rem;color:#3a5a7c;text-transform:uppercase;margin-bottom:3px;">Decision</div>
+                  <div style="font-size:0.75rem;font-weight:700;color:{color};">{decision}</div>
+                </div>
+                <div style="background:#070b14;border:1px solid #111d2e;border-radius:8px;padding:0.5rem;text-align:center;">
+                  <div style="font-size:0.6rem;color:#3a5a7c;text-transform:uppercase;margin-bottom:3px;">Analyst</div>
+                  <div style="font-size:0.75rem;font-weight:700;color:#c8d8f0;">{analyst}</div>
+                </div>
+                <div style="background:#070b14;border:1px solid #111d2e;border-radius:8px;padding:0.5rem;text-align:center;">
+                  <div style="font-size:0.6rem;color:#3a5a7c;text-transform:uppercase;margin-bottom:3px;">Time</div>
+                  <div style="font-size:0.75rem;font-weight:700;color:#c8d8f0;">{resolved_at}</div>
+                </div>
+                <div style="background:#070b14;border:1px solid #111d2e;border-radius:8px;padding:0.5rem;text-align:center;">
+                  <div style="font-size:0.6rem;color:#3a5a7c;text-transform:uppercase;margin-bottom:3px;">Status</div>
+                  <div style="font-size:0.75rem;font-weight:700;color:{s_color};">{status}</div>
+                </div>
+              </div>
+              <div style="font-size:0.65rem;color:#3a5a7c;">RF:{v_icons[0]} LR:{v_icons[1]} SVM:{v_icons[2]} · {flags}</div>
+              {f'<div style="margin-top:0.5rem;background:#070b14;border-left:3px solid {color};border-radius:6px;padding:0.5rem 0.75rem;font-size:0.72rem;color:#8ba4c8;">📝 {notes}</div>' if notes else ""}
+            </div>""", unsafe_allow_html=True)
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  PAGE 4 — RULES ENGINE
+# ══════════════════════════════════════════════════════════════════════════════
+def page_rules_engine():
+    show_stats_bar()
+    st.markdown("""
+    <div class="page-header">
+      <div class="page-title">🔒 Rules <span>Engine</span></div>
+      <div class="page-sub">Set custom rules that run on top of the ML layer — every transaction is checked automatically</div>
+    </div>""", unsafe_allow_html=True)
+
+    # Active rules
+    st.markdown('<div class="section-card">', unsafe_allow_html=True)
+    st.markdown('<div class="section-title">Active Rules</div>', unsafe_allow_html=True)
+
+    if not st.session_state.rules:
+        st.markdown("""
+        <div style="text-align:center;padding:1.5rem;color:#3a5a7c;font-size:0.82rem;">
+          No rules yet — create one below
+        </div>""", unsafe_allow_html=True)
+    else:
+        for i, rule in enumerate(st.session_state.rules):
+            enabled = rule.get("enabled", True)
+            rc1, rc2, rc3 = st.columns([3, 1, 1])
+            with rc1:
+                type_labels = {"score_above": "Risk score above", "amount_above": "Amount above ₹", "tier_is": "Risk tier is"}
+                label = f"{type_labels.get(rule['type'], rule['type'])} {rule['value']}"
+                st.markdown(f"""
+                <div style="background:#070b14;border:1px solid {'#3b82f6' if enabled else '#1a2a42'};border-radius:10px;padding:0.6rem 1rem;">
+                  <div style="font-size:0.8rem;font-weight:700;color:{'#c8d8f0' if enabled else '#3a5a7c'};">🔒 {rule['name']}</div>
+                  <div style="font-size:0.68rem;color:#3a5a7c;margin-top:2px;">{label} → Auto Block</div>
+                </div>""", unsafe_allow_html=True)
+            with rc2:
+                toggle = "⏸ Disable" if enabled else "▶ Enable"
+                if st.button(toggle, key=f"toggle_rule_{i}", use_container_width=True):
+                    st.session_state.rules[i]["enabled"] = not enabled
+                    st.rerun()
+            with rc3:
+                if st.button("🗑 Delete", key=f"delete_rule_{i}", use_container_width=True):
+                    st.session_state.rules.pop(i)
+                    st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    # Create new rule
+    st.markdown('<div class="section-card">', unsafe_allow_html=True)
+    st.markdown('<div class="section-title">Create New Rule</div>', unsafe_allow_html=True)
+
+    nr1, nr2, nr3 = st.columns([1.5, 1.5, 1])
+    with nr1:
+        rule_name = st.text_input("Rule Name", placeholder="e.g. High Amount Online Block")
+    with nr2:
+        rule_type = st.selectbox("Condition", ["score_above", "amount_above", "tier_is"],
+                                  format_func=lambda x: {"score_above":"Risk score above (0-1)","amount_above":"Transaction amount above (₹)","tier_is":"Risk tier is"}[x])
+    with nr3:
+        if rule_type == "tier_is":
+            rule_val = st.selectbox("Value", ["CRITICAL","HIGH","MEDIUM"])
+        else:
+            default = 0.75 if rule_type == "score_above" else 50000
+            rule_val = st.number_input("Value", value=default, min_value=0.0)
+
+    if st.button("➕  Add Rule", use_container_width=True):
+        if rule_name:
+            st.session_state.rules.append({
+                "name":    rule_name,
+                "type":    rule_type,
+                "value":   rule_val,
+                "enabled": True,
+            })
+            st.success(f"Rule '{rule_name}' added! It will apply to all new transactions.")
+            st.rerun()
+        else:
+            st.error("Please enter a rule name.")
+
+    # Example rules
+    st.markdown("""
+    <div style="margin-top:0.75rem;background:#070b14;border:1px solid #111d2e;border-radius:10px;padding:0.75rem 1rem;">
+      <div style="font-size:0.68rem;color:#3a5a7c;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:0.5rem;">Example Rules</div>
+      <div style="font-size:0.72rem;color:#3a5a7c;line-height:1.9;">
+        • Risk score above 0.75 → Auto Block all high confidence fraud<br>
+        • Amount above ₹75,000 → Flag large transactions regardless of score<br>
+        • Tier is HIGH → Send all HIGH risk to immediate review
+      </div>
+    </div>""", unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  PAGE 5 — AUDIT LOG
+# ══════════════════════════════════════════════════════════════════════════════
+def page_audit_log():
+    show_stats_bar()
+    st.markdown("""
+    <div class="page-header">
+      <div class="page-title">📄 Audit <span>Log</span></div>
+      <div class="page-sub">Every decision logged automatically — full RBI compliance trail</div>
+    </div>""", unsafe_allow_html=True)
+
+    log = st.session_state.audit_log
+
+    # Summary
+    auto_d    = len([l for l in log if l.get("analyst") == "System"])
+    manual_d  = len([l for l in log if l.get("analyst") != "System"])
+    blocked_d = len([l for l in log if "Block" in l.get("decision","")])
+    approved_d= len([l for l in log if "Approv" in l.get("decision","")])
+
+    st.markdown(f"""
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:1rem;margin-bottom:1.5rem;">
+      <div class="stat-card blue"><div class="stat-label">Total Logged</div><div class="stat-value blue">{len(log)}</div><div class="stat-sub">All decisions</div></div>
+      <div class="stat-card green"><div class="stat-label">Auto Decisions</div><div class="stat-value green">{auto_d}</div><div class="stat-sub">By system</div></div>
+      <div class="stat-card amber"><div class="stat-label">Manual Decisions</div><div class="stat-value amber">{manual_d}</div><div class="stat-sub">By analyst</div></div>
+      <div class="stat-card red"><div class="stat-label">Total Blocked</div><div class="stat-value red">{blocked_d}</div><div class="stat-sub">Fraud stopped</div></div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Filter pills
+    af1, af2, af3, af4 = st.columns(4)
+    for col, label, key in [(af1,"All","al_all"),(af2,"Auto Only","al_auto"),(af3,"Manual Only","al_manual"),(af4,"Blocked Only","al_blocked")]:
+        with col:
+            if st.button(label, key=key, use_container_width=True):
+                st.session_state["al_filter"] = label
+                st.rerun()
+
+    if "al_filter" not in st.session_state: st.session_state["al_filter"] = "All"
+    af = st.session_state["al_filter"]
+    if af == "Auto Only":    log = [l for l in log if l.get("analyst") == "System"]
+    elif af == "Manual Only":log = [l for l in log if l.get("analyst") != "System"]
+    elif af == "Blocked Only":log= [l for l in log if "Block" in l.get("decision","")]
+
+    st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
+    st.markdown('<div class="section-card">', unsafe_allow_html=True)
+    st.markdown('<div class="section-title">Decision Log</div>', unsafe_allow_html=True)
+
+    if not log:
+        st.markdown('<div style="text-align:center;padding:2rem;color:#3a5a7c;font-size:0.82rem;">No entries yet — decisions will appear here automatically.</div>', unsafe_allow_html=True)
+    else:
+        # Header
+        st.markdown("""
+        <div style="display:grid;grid-template-columns:1fr 1.5fr 1fr 1fr 1fr 1fr;padding:0.4rem 0.75rem;margin-bottom:0.25rem;">
+          <span style="font-size:0.6rem;color:#1e3050;text-transform:uppercase;font-weight:700;">TXN ID</span>
+          <span style="font-size:0.6rem;color:#1e3050;text-transform:uppercase;font-weight:700;">Merchant</span>
+          <span style="font-size:0.6rem;color:#1e3050;text-transform:uppercase;font-weight:700;">Amount</span>
+          <span style="font-size:0.6rem;color:#1e3050;text-transform:uppercase;font-weight:700;">Risk</span>
+          <span style="font-size:0.6rem;color:#1e3050;text-transform:uppercase;font-weight:700;">Decision</span>
+          <span style="font-size:0.6rem;color:#1e3050;text-transform:uppercase;font-weight:700;">Analyst · Time</span>
+        </div>""", unsafe_allow_html=True)
+
+        for entry in log[:50]:
+            t          = entry["tier"]
+            color      = t["color"]
+            decision   = entry.get("decision","—")
+            analyst    = entry.get("analyst","System")
+            resolved_at= entry.get("resolved_at","—")
+            d_color    = "#ef4444" if "Block" in decision else ("#10b981" if "Approv" in decision else "#f59e0b")
+            a_color    = "#3a5a7c" if analyst == "System" else "#3b82f6"
+
+            st.markdown(f"""
+            <div style="display:grid;grid-template-columns:1fr 1.5fr 1fr 1fr 1fr 1fr;padding:0.55rem 0.75rem;border-bottom:1px solid #0a1020;align-items:center;">
+              <span style="font-family:'JetBrains Mono',monospace;font-size:0.7rem;color:#3a5a7c;">{entry['id']}</span>
+              <span style="font-size:0.75rem;font-weight:600;color:#c8d8f0;">{entry['merchant']}</span>
+              <span style="font-family:'JetBrains Mono',monospace;font-size:0.75rem;color:#e0e8f5;">{entry['amount']}</span>
+              <span style="font-size:0.7rem;font-weight:700;color:{color};">{t['tier']} {int(entry['score']*100)}%</span>
+              <span style="font-size:0.72rem;font-weight:700;color:{d_color};">{decision}</span>
+              <span style="font-size:0.65rem;color:{a_color};">{analyst} · {resolved_at}</span>
+            </div>""", unsafe_allow_html=True)
+
+    st.markdown('</div>', unsafe_allow_html=True)
