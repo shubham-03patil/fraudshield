@@ -670,24 +670,7 @@ def page_command_center():
     if not st.session_state.feed_paused:
         now = time.time()
         if now - st.session_state.last_txn_time >= st.session_state.sim_speed:
-            txn = generate_transaction()
-            txn["card"] = f"**** **** **** {random.randint(1000,9999)}"
-            txn["dist_home"] = txn.get("dist_home", random.uniform(0,200))
-            tier = txn["tier"]
-            if tier["auto"]:
-                txn["status"] = tier["action"]
-                if tier["tier"] == "CRITICAL":
-                    st.session_state.fraud_blocked += 1
-                    st.session_state.money_saved   += txn["amount_val"]
-                    st.session_state.last_notif     = txn
-                    st.session_state.audit_log.insert(0, {**txn, "decision":"Auto Blocked","analyst":"System","resolved_at":txn["time"]})
-            else:
-                txn["status"] = "Pending"
-                st.session_state.alert_queue.insert(0, txn)
-                st.session_state.alert_queue = st.session_state.alert_queue[:50]
-            st.session_state.feed.insert(0, txn)
-            st.session_state.feed        = st.session_state.feed[:30]
-            st.session_state.total_today += 1
+            add_transaction()
             st.session_state.last_txn_time = now
             st.rerun()
 
