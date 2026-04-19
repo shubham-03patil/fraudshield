@@ -230,9 +230,16 @@ def add_transaction():
     # Apply custom rules first
     for rule in st.session_state.rules:
         if eval_rule(rule, txn):
-            txn["tier"]   = get_risk_tier(0.95)  # force CRITICAL
-            txn["status"] = "Blocked (Rule: " + rule["name"] + ")"
-            txn["auto"]   = True
+            action = rule.get("action", "block")
+            if action == "block":
+                txn["tier"]          = get_risk_tier(0.95)
+                txn["status"]        = "Auto Blocked"
+                txn["auto"]          = True
+                txn["rule_triggered"]= rule["name"]
+            else:  # escalate
+                txn["status"]        = "Pending"
+                txn["auto"]          = False
+                txn["rule_triggered"]= rule["name"]
             tier = txn["tier"]
             break
 
@@ -261,13 +268,24 @@ def add_transaction():
 
 def eval_rule(rule, txn):
     """Evaluate a custom rule against a transaction."""
+    if not rule.get("enabled", True): return False
     try:
-        score = txn["score"]
+        score      = txn["score"]
         amount_val = txn["amount_val"]
-        tier_name = txn["tier"]["tier"]
-        if rule["type"] == "score_above" and score >= rule["value"]: return True
-        if rule["type"] == "amount_above" and amount_val >= rule["value"]: return True
-        if rule["type"] == "tier_is" and tier_name == rule["value"]: return True
+        tier_name  = txn["tier"]["tier"]
+        merchant   = txn.get("merchant","")
+        dist_home  = txn.get("dist_home", 0)
+        no_chip    = not txn.get("used_chip", 1)
+        no_pin     = not txn.get("used_pin", 1)
+        online     = bool(txn.get("online_order", 0))
+        suspicious = ["Unknown Vendor","International Transfer","Offshore Store","Unverified Merchant"]
+
+        if rule["type"] == "score_above"     and score >= rule["value"]:          return True
+        if rule["type"] == "amount_above"    and amount_val >= rule["value"]:     return True
+        if rule["type"] == "tier_is"         and tier_name == rule["value"]:      return True
+        if rule["type"] == "no_chip_no_pin"  and no_chip and no_pin and online:   return True
+        if rule["type"] == "dist_above"      and dist_home >= rule["value"]:      return True
+        if rule["type"] == "unknown_merchant" and merchant in suspicious:         return True
     except: pass
     return False
 
@@ -444,7 +462,7 @@ def page_command_center():
 
     search = st.text_input("search", placeholder="🔍  Search by TXN ID or Merchant name...", label_visibility="collapsed")
 
-    filters = ["All", "Critical", "High", "Medium", "Queue", "Safe"]
+    filters = ["All", "Critical", "High", "Medium", "Pending", "Safe"]
     pcols   = st.columns(len(filters))
     for i, f in enumerate(filters):
         with pcols[i]:
@@ -482,7 +500,7 @@ def page_command_center():
             if filt == "Critical":  feed = [t for t in feed if t["tier"]["tier"] == "CRITICAL"]
             elif filt == "High":    feed = [t for t in feed if t["tier"]["tier"] == "HIGH"]
             elif filt == "Medium":  feed = [t for t in feed if t["tier"]["tier"] == "MEDIUM"]
-            elif filt == "Queue":   feed = [t for t in feed if not t["auto"]]
+            elif filt == "Pending": feed = [t for t in feed if not t["auto"]]
             elif filt == "Safe":    feed = [t for t in feed if t["tier"]["tier"] in ["SAFE","LOW"]]
 
         if not feed:
@@ -728,7 +746,7 @@ def page_alert_queue():
                 </div>""", unsafe_allow_html=True)
 
                 # Note input + action buttons
-                note = st.text_input("Analyst note (optional)", placeholder="e.g. Customer called to confirm transaction...", key=f"note_{txn['id']}", label_visibility="collapsed")
+                note = st.text_input("Analyst note", placeholder="Add decision reason e.g. Customer confirmed · Card stolen · Escalating for senior review...", key=f"note_{txn['id']}", label_visibility="collapsed")
                 b1, b2, b3 = st.columns(3)
                 with b1:
                     if st.button(f"✅ Approve", key=f"approve_{txn['id']}_{i}", use_container_width=True):
@@ -864,7 +882,7 @@ def page_case_manager():
               <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:0.5rem;margin-bottom:0.6rem;">
                 <div style="background:#070b14;border:1px solid #111d2e;border-radius:8px;padding:0.5rem;text-align:center;">
                   <div style="font-size:0.6rem;color:#3a5a7c;text-transform:uppercase;margin-bottom:3px;">Decision</div>
-                  <div style="font-size:0.75rem;font-weight:700;color:{color};">{decision}</div>
+                  <div style="font-size:0.75rem;font-weight:700;color:{'#10b981' if 'Approv' in decision else '#ef4444' if 'Block' in decision else '#f59e0b' if 'Escal' in decision else color};">{decision}</div>
                 </div>
                 <div style="background:#070b14;border:1px solid #111d2e;border-radius:8px;padding:0.5rem;text-align:center;">
                   <div style="font-size:0.6rem;color:#3a5a7c;text-transform:uppercase;margin-bottom:3px;">Analyst</div>
@@ -891,12 +909,26 @@ def page_rules_engine():
     st.markdown("""
     <div class="page-header">
       <div class="page-title">🔒 Rules <span>Engine</span></div>
-      <div class="page-sub">Set custom rules that run on top of the ML layer — every transaction is checked automatically</div>
+      <div class="page-sub">Custom rules run on every transaction — on top of the ML layer. Rules can override ML decisions.</div>
+    </div>""", unsafe_allow_html=True)
+
+    # How it works banner
+    st.markdown("""
+    <div style="background:rgba(59,130,246,0.07);border:1px solid rgba(59,130,246,0.2);border-radius:12px;padding:1rem 1.25rem;margin-bottom:1rem;display:flex;gap:1rem;align-items:flex-start;">
+      <span style="font-size:1.4rem;flex-shrink:0;">⚙️</span>
+      <div>
+        <div style="font-size:0.82rem;font-weight:700;color:#c8d8f0;margin-bottom:0.3rem;">How Rules Work</div>
+        <div style="font-size:0.72rem;color:#3a5a7c;line-height:1.8;">
+          Every new transaction is checked against all active rules <strong style="color:#8ba4c8;">before</strong> the ML decision is applied.
+          If a rule matches — the transaction is <strong style="color:#ef4444;">Auto Blocked</strong> or <strong style="color:#f59e0b;">Escalated</strong> immediately, regardless of the ML score.
+          The rule name appears on the transaction in the Command Center feed.
+        </div>
+      </div>
     </div>""", unsafe_allow_html=True)
 
     # Active rules
     st.markdown('<div class="section-card">', unsafe_allow_html=True)
-    st.markdown('<div class="section-title">Active Rules</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="section-title">Active Rules ({len(st.session_state.rules)})</div>', unsafe_allow_html=True)
 
     if not st.session_state.rules:
         st.markdown("""
@@ -904,16 +936,34 @@ def page_rules_engine():
           No rules yet — create one below
         </div>""", unsafe_allow_html=True)
     else:
+        type_labels = {
+            "score_above":    "Risk score above",
+            "amount_above":   "Amount above ₹",
+            "tier_is":        "Risk tier is",
+            "no_chip_no_pin": "No Chip AND No PIN AND Online",
+            "dist_above":     "Distance from home above (km)",
+            "unknown_merchant":"Merchant is Unknown/Unverified",
+        }
+        action_labels = {"block": "Auto Block 🚨", "escalate": "Escalate ⚠️"}
         for i, rule in enumerate(st.session_state.rules):
-            enabled = rule.get("enabled", True)
+            enabled   = rule.get("enabled", True)
+            rtype     = rule.get("type","")
+            rval      = rule.get("value","")
+            raction   = rule.get("action","block")
+            cond_label= f"{type_labels.get(rtype, rtype)} {rval if rtype not in ['no_chip_no_pin','unknown_merchant'] else ''}"
+            act_label = action_labels.get(raction, "Auto Block 🚨")
+            act_color = "#ef4444" if raction == "block" else "#f59e0b"
+
             rc1, rc2, rc3 = st.columns([3, 1, 1])
             with rc1:
-                type_labels = {"score_above": "Risk score above", "amount_above": "Amount above ₹", "tier_is": "Risk tier is"}
-                label = f"{type_labels.get(rule['type'], rule['type'])} {rule['value']}"
                 st.markdown(f"""
                 <div style="background:#070b14;border:1px solid {'#3b82f6' if enabled else '#1a2a42'};border-radius:10px;padding:0.6rem 1rem;">
-                  <div style="font-size:0.8rem;font-weight:700;color:{'#c8d8f0' if enabled else '#3a5a7c'};">🔒 {rule['name']}</div>
-                  <div style="font-size:0.68rem;color:#3a5a7c;margin-top:2px;">{label} → Auto Block</div>
+                  <div style="display:flex;justify-content:space-between;align-items:center;">
+                    <div style="font-size:0.82rem;font-weight:700;color:{'#c8d8f0' if enabled else '#3a5a7c'};">🔒 {rule['name']}</div>
+                    <span style="font-size:0.62rem;font-weight:700;color:{act_color};background:rgba(239,68,68,0.1);padding:2px 8px;border-radius:20px;">{act_label}</span>
+                  </div>
+                  <div style="font-size:0.68rem;color:#3a5a7c;margin-top:3px;">IF {cond_label}</div>
+                  <div style="font-size:0.62rem;color:{'#3b82f6' if enabled else '#1e3050'};margin-top:2px;">{'● Active — applied to all new transactions' if enabled else '○ Disabled'}</div>
                 </div>""", unsafe_allow_html=True)
             with rc2:
                 toggle = "⏸ Disable" if enabled else "▶ Enable"
@@ -924,24 +974,44 @@ def page_rules_engine():
                 if st.button("🗑 Delete", key=f"delete_rule_{i}", use_container_width=True):
                     st.session_state.rules.pop(i)
                     st.rerun()
+            st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
     # Create new rule
     st.markdown('<div class="section-card">', unsafe_allow_html=True)
     st.markdown('<div class="section-title">Create New Rule</div>', unsafe_allow_html=True)
 
-    nr1, nr2, nr3 = st.columns([1.5, 1.5, 1])
+    nr1, nr2 = st.columns([1.5, 1.5])
     with nr1:
-        rule_name = st.text_input("Rule Name", placeholder="e.g. High Amount Online Block")
+        rule_name = st.text_input("Rule Name", placeholder="e.g. Block High Amount Online")
     with nr2:
-        rule_type = st.selectbox("Condition", ["score_above", "amount_above", "tier_is"],
-                                  format_func=lambda x: {"score_above":"Risk score above (0-1)","amount_above":"Transaction amount above (₹)","tier_is":"Risk tier is"}[x])
-    with nr3:
-        if rule_type == "tier_is":
-            rule_val = st.selectbox("Value", ["CRITICAL","HIGH","MEDIUM"])
-        else:
-            default = 0.75 if rule_type == "score_above" else 50000
-            rule_val = st.number_input("Value", value=default, min_value=0.0)
+        rule_action = st.selectbox("Action", ["block","escalate"],
+                                   format_func=lambda x: "Auto Block 🚨" if x=="block" else "Escalate to Queue ⚠️")
+
+    rule_type = st.selectbox("Condition", [
+        "score_above", "amount_above", "tier_is",
+        "no_chip_no_pin", "dist_above", "unknown_merchant"
+    ], format_func=lambda x: {
+        "score_above":     "Risk score above (0.0 – 1.0)",
+        "amount_above":    "Transaction amount above ₹",
+        "tier_is":         "Risk tier equals",
+        "no_chip_no_pin":  "No Chip AND No PIN AND Online Order",
+        "dist_above":      "Distance from home above (km)",
+        "unknown_merchant":"Merchant is Unknown/Unverified",
+    }[x])
+
+    rule_val = None
+    if rule_type == "score_above":
+        rule_val = st.slider("Threshold (0.0 – 1.0)", 0.0, 1.0, 0.75, 0.01)
+    elif rule_type == "amount_above":
+        rule_val = st.number_input("Amount (₹)", value=50000, min_value=0)
+    elif rule_type == "tier_is":
+        rule_val = st.selectbox("Tier", ["CRITICAL","HIGH","MEDIUM"])
+    elif rule_type == "dist_above":
+        rule_val = st.number_input("Distance (km)", value=100, min_value=0)
+    else:
+        rule_val = True
+        st.markdown(f'<div style="font-size:0.75rem;color:#3a5a7c;padding:0.5rem 0;">This rule matches any transaction with the above condition automatically.</div>', unsafe_allow_html=True)
 
     if st.button("➕  Add Rule", use_container_width=True):
         if rule_name:
@@ -949,23 +1019,38 @@ def page_rules_engine():
                 "name":    rule_name,
                 "type":    rule_type,
                 "value":   rule_val,
+                "action":  rule_action,
                 "enabled": True,
             })
-            st.success(f"Rule '{rule_name}' added! It will apply to all new transactions.")
+            st.success(f"✅ Rule '{rule_name}' is now active! Go to Command Center to see it in action.")
             st.rerun()
         else:
             st.error("Please enter a rule name.")
 
-    # Example rules
-    st.markdown("""
-    <div style="margin-top:0.75rem;background:#070b14;border:1px solid #111d2e;border-radius:10px;padding:0.75rem 1rem;">
-      <div style="font-size:0.68rem;color:#3a5a7c;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:0.5rem;">Example Rules</div>
-      <div style="font-size:0.72rem;color:#3a5a7c;line-height:1.9;">
-        • Risk score above 0.75 → Auto Block all high confidence fraud<br>
-        • Amount above ₹75,000 → Flag large transactions regardless of score<br>
-        • Tier is HIGH → Send all HIGH risk to immediate review
-      </div>
-    </div>""", unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    # Quick add preset rules
+    st.markdown('<div class="section-card">', unsafe_allow_html=True)
+    st.markdown('<div class="section-title">Quick Add — Preset Rules</div>', unsafe_allow_html=True)
+    st.markdown('<div style="font-size:0.72rem;color:#3a5a7c;margin-bottom:0.75rem;">Add common bank fraud rules with one click</div>', unsafe_allow_html=True)
+
+    presets = [
+        ("Block No Chip + No PIN",    "no_chip_no_pin",  True,   "block"),
+        ("Block Unknown Merchant",    "unknown_merchant",True,   "block"),
+        ("Block Score > 0.8",         "score_above",     0.8,    "block"),
+        ("Escalate Amount > ₹75,000", "amount_above",    75000,  "escalate"),
+        ("Escalate Dist > 150km",     "dist_above",      150,    "escalate"),
+    ]
+    p_cols = st.columns(len(presets))
+    for i, (name, ptype, pval, paction) in enumerate(presets):
+        with p_cols[i]:
+            already = any(r["name"] == name for r in st.session_state.rules)
+            if already:
+                st.markdown(f'<div style="background:#070b14;border:1px solid #1a2a42;border-radius:8px;padding:0.4rem;text-align:center;font-size:0.65rem;color:#2a3a52;">✓ Added</div>', unsafe_allow_html=True)
+            else:
+                if st.button(f"+ {name}", key=f"preset_{i}", use_container_width=True):
+                    st.session_state.rules.append({"name":name,"type":ptype,"value":pval,"action":paction,"enabled":True})
+                    st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════════════════════
