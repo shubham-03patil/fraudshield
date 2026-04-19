@@ -126,13 +126,12 @@ st.markdown("""
 *{box-sizing:border-box;}
 html,body,[data-testid="stAppViewContainer"]{background:#060a12!important;color:#e8edf5!important;font-family:'Syne',sans-serif!important;}
 [data-testid="stAppViewContainer"]>.main{background:#060a12!important;}
-[data-testid="stSidebar"]{background:#080c16!important;border-right:1px solid #111d2e!important;}
+[data-testid="stSidebar"]{background:#080c16!important;border-right:1px solid #111d2e!important;min-width:250px!important;transform:none!important;}
 #MainMenu,footer,header,[data-testid="stToolbar"],[data-testid="stDecoration"],[data-testid="stStatusWidget"]{display:none!important;}
-[data-testid="stSidebarNav"]{display:none;}
-[data-testid="collapsedControl"]{display:flex!important;visibility:visible!important;opacity:1!important;z-index:999!important;position:fixed!important;}
-[data-testid="stSidebarCollapsedControl"]{display:flex!important;visibility:visible!important;opacity:1!important;}
-section[data-testid="stSidebar"] > div > div > div > button{display:flex!important;visibility:visible!important;}
-button[data-testid="baseButton-header"]{display:flex!important;visibility:visible!important;}
+/* Always show sidebar toggle */
+[data-testid="collapsedControl"]{display:flex!important;visibility:visible!important;opacity:1!important;}
+button[aria-label="Close sidebar"]{display:flex!important;}
+button[aria-label="Open sidebar"]{display:flex!important;}
 ::-webkit-scrollbar{width:4px;}::-webkit-scrollbar-track{background:#0a1020;}::-webkit-scrollbar-thumb{background:#1e3050;border-radius:2px;}
 
 /* Sidebar */
@@ -367,6 +366,21 @@ def show_sidebar():
             st.rerun()
 
 # ── Stats bar (shown on all pages) ────────────────────────────────────────────
+def show_top_nav():
+    page = st.session_state.page
+    alert_count = len([a for a in st.session_state.get("alert_queue",[]) if a.get("status") == "Pending"])
+    nav_pages = ["Command Center","Alert Queue","Case Manager","Rules Engine","Audit Log"]
+    nav_icons = ["🏠","🚨","📋","🔒","📄"]
+    cols = st.columns(5)
+    for i, (name, icon) in enumerate(zip(nav_pages, nav_icons)):
+        with cols[i]:
+            label = icon + " " + name + (" 🔴" if name == "Alert Queue" and alert_count > 0 else "")
+            if st.button(label, key="topnav_" + name, use_container_width=True,
+                         type="primary" if page == name else "secondary"):
+                st.session_state.page = name
+                st.rerun()
+    st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
+
 def show_stats_bar():
     pending = len([a for a in st.session_state.alert_queue if a["status"] == "Pending"])
     st.markdown(f"""
@@ -420,6 +434,7 @@ def get_flags(txn):
     return " · ".join(flags) if flags else "All checks passed"
 
 def page_command_center():
+    show_top_nav()
     # Auto-refresh page every 8 seconds to generate new transactions
     if HAS_AUTOREFRESH:
         st_autorefresh(interval=8000, key="feed_refresh")
@@ -653,6 +668,7 @@ def page_coming_soon(name, icon, desc):
 #  PAGE 2 — ALERT QUEUE
 # ══════════════════════════════════════════════════════════════════════════════
 def page_alert_queue():
+    show_top_nav()
     show_stats_bar()
     st.markdown("""
     <div class="page-header">
@@ -769,6 +785,7 @@ def page_alert_queue():
 #  PAGE 3 — CASE MANAGER
 # ══════════════════════════════════════════════════════════════════════════════
 def page_case_manager():
+    show_top_nav()
     show_stats_bar()
     st.markdown("""
     <div class="page-header">
@@ -888,6 +905,7 @@ def page_case_manager():
 #  PAGE 4 — RULES ENGINE
 # ══════════════════════════════════════════════════════════════════════════════
 def page_rules_engine():
+    show_top_nav()
     show_stats_bar()
     st.markdown("""
     <div class="page-header">
@@ -973,6 +991,7 @@ def page_rules_engine():
 #  PAGE 5 — AUDIT LOG
 # ══════════════════════════════════════════════════════════════════════════════
 def page_audit_log():
+    show_top_nav()
     show_stats_bar()
     st.markdown("""
     <div class="page-header">
