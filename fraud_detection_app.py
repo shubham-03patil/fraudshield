@@ -366,21 +366,6 @@ def show_sidebar():
             st.rerun()
 
 # ── Stats bar (shown on all pages) ────────────────────────────────────────────
-def show_top_nav():
-    page = st.session_state.page
-    alert_count = len([a for a in st.session_state.get("alert_queue",[]) if a.get("status") == "Pending"])
-    nav_pages = ["Command Center","Alert Queue","Case Manager","Rules Engine","Audit Log"]
-    nav_icons = ["🏠","🚨","📋","🔒","📄"]
-    cols = st.columns(5)
-    for i, (name, icon) in enumerate(zip(nav_pages, nav_icons)):
-        with cols[i]:
-            label = icon + " " + name + (" 🔴" if name == "Alert Queue" and alert_count > 0 else "")
-            if st.button(label, key="topnav_" + name, use_container_width=True,
-                         type="primary" if page == name else "secondary"):
-                st.session_state.page = name
-                st.rerun()
-    st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
-
 def show_stats_bar():
     pending = len([a for a in st.session_state.alert_queue if a["status"] == "Pending"])
     st.markdown(f"""
@@ -434,7 +419,6 @@ def get_flags(txn):
     return " · ".join(flags) if flags else "All checks passed"
 
 def page_command_center():
-    show_top_nav()
     # Auto-refresh page every 8 seconds to generate new transactions
     if HAS_AUTOREFRESH:
         st_autorefresh(interval=8000, key="feed_refresh")
@@ -668,7 +652,6 @@ def page_coming_soon(name, icon, desc):
 #  PAGE 2 — ALERT QUEUE
 # ══════════════════════════════════════════════════════════════════════════════
 def page_alert_queue():
-    show_top_nav()
     show_stats_bar()
     st.markdown("""
     <div class="page-header">
@@ -785,7 +768,6 @@ def page_alert_queue():
 #  PAGE 3 — CASE MANAGER
 # ══════════════════════════════════════════════════════════════════════════════
 def page_case_manager():
-    show_top_nav()
     show_stats_bar()
     st.markdown("""
     <div class="page-header">
@@ -905,7 +887,6 @@ def page_case_manager():
 #  PAGE 4 — RULES ENGINE
 # ══════════════════════════════════════════════════════════════════════════════
 def page_rules_engine():
-    show_top_nav()
     show_stats_bar()
     st.markdown("""
     <div class="page-header">
@@ -991,7 +972,6 @@ def page_rules_engine():
 #  PAGE 5 — AUDIT LOG
 # ══════════════════════════════════════════════════════════════════════════════
 def page_audit_log():
-    show_top_nav()
     show_stats_bar()
     st.markdown("""
     <div class="page-header">
