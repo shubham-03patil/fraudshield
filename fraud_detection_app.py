@@ -116,7 +116,8 @@ def generate_transaction():
 
 # ── Page config ────────────────────────────────────────────────────────────────
 st.set_page_config(page_title="FraudShield", page_icon="🛡️",
-                   layout="wide", initial_sidebar_state="expanded")
+                   layout="wide", initial_sidebar_state="expanded",
+                   menu_items=None)
 
 # ── CSS ────────────────────────────────────────────────────────────────────────
 st.markdown("""
@@ -128,8 +129,10 @@ html,body,[data-testid="stAppViewContainer"]{background:#060a12!important;color:
 [data-testid="stSidebar"]{background:#080c16!important;border-right:1px solid #111d2e!important;}
 #MainMenu,footer,header,[data-testid="stToolbar"],[data-testid="stDecoration"],[data-testid="stStatusWidget"]{display:none!important;}
 [data-testid="stSidebarNav"]{display:none;}
-[data-testid="collapsedControl"]{display:flex!important;visibility:visible!important;opacity:1!important;}
-button[kind="header"]{display:flex!important;}
+[data-testid="collapsedControl"]{display:flex!important;visibility:visible!important;opacity:1!important;z-index:999!important;position:fixed!important;}
+[data-testid="stSidebarCollapsedControl"]{display:flex!important;visibility:visible!important;opacity:1!important;}
+section[data-testid="stSidebar"] > div > div > div > button{display:flex!important;visibility:visible!important;}
+button[data-testid="baseButton-header"]{display:flex!important;visibility:visible!important;}
 ::-webkit-scrollbar{width:4px;}::-webkit-scrollbar-track{background:#0a1020;}::-webkit-scrollbar-thumb{background:#1e3050;border-radius:2px;}
 
 /* Sidebar */
