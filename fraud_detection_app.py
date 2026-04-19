@@ -228,7 +228,7 @@ def add_transaction():
     tier = txn["tier"]
 
     # Apply custom rules first
-    for rule in st.session_state.rules:
+    for idx_r, rule in enumerate(st.session_state.rules):
         if eval_rule(rule, txn):
             action = rule.get("action", "block")
             if action == "block":
@@ -240,6 +240,8 @@ def add_transaction():
                 txn["status"]        = "Pending"
                 txn["auto"]          = False
                 txn["rule_triggered"]= rule["name"]
+            # Increment hit counter
+            st.session_state.rules[idx_r]["hits"] = st.session_state.rules[idx_r].get("hits", 0) + 1
             tier = txn["tier"]
             break
 
@@ -592,6 +594,51 @@ def page_command_center():
                 <div style="height:100%;width:{pct}%;background:{col};border-radius:3px;opacity:0.85;"></div>
               </div>
             </div>""", unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
+
+        # ── Risk Trend Chart ──────────────────────────
+        st.markdown('<div class="section-card">', unsafe_allow_html=True)
+        st.markdown('<div class="section-title">Risk Trend (Last 20)</div>', unsafe_allow_html=True)
+
+        feed_scores = [t["score"] for t in reversed(st.session_state.feed[:20])]
+        if len(feed_scores) < 2:
+            st.markdown('<div style="text-align:center;padding:1rem;color:#3a5a7c;font-size:0.75rem;">Waiting for more transactions...</div>', unsafe_allow_html=True)
+        else:
+            W = 260; H = 80
+            n    = len(feed_scores)
+            step = W / max(n - 1, 1)
+            pts  = [(i * step, H - feed_scores[i] * H) for i in range(n)]
+            pt_str   = " ".join(f"{x:.1f},{y:.1f}" for x, y in pts)
+            fill_str = f"0,{H} " + pt_str + f" {W},{H}"
+            dots = "".join(
+                f'<circle cx="{x:.1f}" cy="{y:.1f}" r="3" fill="{get_risk_tier(feed_scores[i])["color"]}"/>'
+                for i, (x, y) in enumerate(pts)
+            )
+            crit_y = H - 0.80 * H
+            high_y = H - 0.60 * H
+            med_y  = H - 0.40 * H
+            svg = f"""<svg viewBox="0 0 {W} {H+10}" style="width:100%;overflow:visible;">
+  <line x1="0" y1="{crit_y:.1f}" x2="{W}" y2="{crit_y:.1f}" stroke="#ef4444" stroke-width="0.5" stroke-dasharray="3,3" opacity="0.5"/>
+  <line x1="0" y1="{high_y:.1f}" x2="{W}" y2="{high_y:.1f}" stroke="#f97316" stroke-width="0.5" stroke-dasharray="3,3" opacity="0.5"/>
+  <line x1="0" y1="{med_y:.1f}"  x2="{W}" y2="{med_y:.1f}"  stroke="#f59e0b" stroke-width="0.5" stroke-dasharray="3,3" opacity="0.5"/>
+  <polygon points="{fill_str}" fill="rgba(59,130,246,0.08)"/>
+  <polyline points="{pt_str}" fill="none" stroke="#3b82f6" stroke-width="1.5" stroke-linejoin="round"/>
+  {dots}
+</svg>"""
+            latest_score = feed_scores[-1]
+            latest_tier  = get_risk_tier(latest_score)
+            st.markdown(f"""
+<div style="padding:0.25rem 0;">{svg}
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;">
+    <div style="display:flex;gap:8px;">
+      <span style="font-size:0.58rem;color:#ef4444;">— 80%</span>
+      <span style="font-size:0.58rem;color:#f97316;">— 60%</span>
+      <span style="font-size:0.58rem;color:#f59e0b;">— 40%</span>
+    </div>
+    <span style="font-size:0.65rem;font-weight:700;color:{latest_tier['color']};">Latest: {int(latest_score*100)}%</span>
+  </div>
+</div>""", unsafe_allow_html=True)
+
         st.markdown('</div>', unsafe_allow_html=True)
 
     # ── Controls Bar ────────────────────────────────────────────────────────────
@@ -963,7 +1010,10 @@ def page_rules_engine():
                     <span style="font-size:0.62rem;font-weight:700;color:{act_color};background:rgba(239,68,68,0.1);padding:2px 8px;border-radius:20px;">{act_label}</span>
                   </div>
                   <div style="font-size:0.68rem;color:#3a5a7c;margin-top:3px;">IF {cond_label}</div>
-                  <div style="font-size:0.62rem;color:{'#3b82f6' if enabled else '#1e3050'};margin-top:2px;">{'● Active — applied to all new transactions' if enabled else '○ Disabled'}</div>
+                  <div style="display:flex;justify-content:space-between;margin-top:2px;">
+                    <span style="font-size:0.62rem;color:{'#3b82f6' if enabled else '#1e3050'};">{'● Active' if enabled else '○ Disabled'}</span>
+                    <span style="font-size:0.62rem;color:#f59e0b;font-family:'JetBrains Mono',monospace;">⚡ {rule.get('hits',0)} triggered</span>
+                  </div>
                 </div>""", unsafe_allow_html=True)
             with rc2:
                 toggle = "⏸ Disable" if enabled else "▶ Enable"
