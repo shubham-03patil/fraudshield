@@ -3,6 +3,11 @@ import pickle
 import random
 import time
 from datetime import datetime
+try:
+    from streamlit_autorefresh import st_autorefresh
+    HAS_AUTOREFRESH = True
+except:
+    HAS_AUTOREFRESH = False
 
 # ── Load models ────────────────────────────────────────────────────────────────
 @st.cache_resource
@@ -123,6 +128,8 @@ html,body,[data-testid="stAppViewContainer"]{background:#060a12!important;color:
 [data-testid="stSidebar"]{background:#080c16!important;border-right:1px solid #111d2e!important;}
 #MainMenu,footer,header,[data-testid="stToolbar"],[data-testid="stDecoration"],[data-testid="stStatusWidget"]{display:none!important;}
 [data-testid="stSidebarNav"]{display:none;}
+[data-testid="collapsedControl"]{display:flex!important;visibility:visible!important;opacity:1!important;}
+button[kind="header"]{display:flex!important;}
 ::-webkit-scrollbar{width:4px;}::-webkit-scrollbar-track{background:#0a1020;}::-webkit-scrollbar-thumb{background:#1e3050;border-radius:2px;}
 
 /* Sidebar */
@@ -410,6 +417,10 @@ def get_flags(txn):
     return " · ".join(flags) if flags else "All checks passed"
 
 def page_command_center():
+    # Auto-refresh page every 8 seconds to generate new transactions
+    if HAS_AUTOREFRESH:
+        st_autorefresh(interval=8000, key="feed_refresh")
+
     st.markdown("""
     <div class="page-header">
       <div class="page-title">🏠 Command <span>Center</span></div>
@@ -425,7 +436,23 @@ def page_command_center():
     if "feed_filter"  not in st.session_state: st.session_state.feed_filter  = "All"
     if "sim_speed"    not in st.session_state: st.session_state.sim_speed    = 8.0
 
-    # Critical notification banner
+    # ── Search + Filter BEFORE feed renders ──────────────────────────────────────
+    if "search_query" not in st.session_state: st.session_state.search_query = ""
+    if "feed_filter"  not in st.session_state: st.session_state.feed_filter  = "All"
+
+    search = st.text_input("search", placeholder="🔍  Search by TXN ID or Merchant name...", label_visibility="collapsed")
+
+    filters = ["All", "Critical", "High", "Medium", "Queue", "Safe"]
+    pcols   = st.columns(len(filters))
+    for i, f in enumerate(filters):
+        with pcols[i]:
+            if st.button(f, key=f"fp_{f}", use_container_width=True):
+                st.session_state.feed_filter = f
+                st.rerun()
+
+    st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
+
+    # ── Critical notification banner ───────────────────────────────────────────
     if st.session_state.last_notif:
         n = st.session_state.last_notif
         st.markdown(f"""
@@ -445,10 +472,9 @@ def page_command_center():
 
         # Apply search or filter
         feed = st.session_state.feed
-        search_q = search if 'search' in dir() else ""
-        if search_q:
-            feed = [t for t in feed if search_q.lower() in t["id"].lower()
-                    or search_q.lower() in t["merchant"].lower()]
+        if search:
+            feed = [t for t in feed if search.lower() in t["id"].lower()
+                    or search.lower() in t["merchant"].lower()]
         else:
             filt = st.session_state.feed_filter
             if filt == "Critical":  feed = [t for t in feed if t["tier"]["tier"] == "CRITICAL"]
@@ -571,23 +597,6 @@ def page_command_center():
           <span>Fraud: <span style="color:#ef4444;font-family:'JetBrains Mono',monospace;font-weight:700;">{fraud_sim}</span></span>
           <span>Clean: <span style="color:#10b981;font-family:'JetBrains Mono',monospace;font-weight:700;">{sim_count-fraud_sim}</span></span>
         </div>""", unsafe_allow_html=True)
-
-    st.markdown("<div style='height:0.4rem'></div>", unsafe_allow_html=True)
-
-    # Row 2 — Search bar
-    if "search_query" not in st.session_state: st.session_state.search_query = ""
-    search = st.text_input("search", placeholder="🔍  Search by TXN ID or Merchant name...", label_visibility="collapsed")
-
-    st.markdown("<div style='height:0.4rem'></div>", unsafe_allow_html=True)
-
-    # Row 3 — Filter pills
-    filters = ["All", "Critical", "High", "Medium", "Queue", "Safe"]
-    pcols = st.columns(len(filters))
-    for i, f in enumerate(filters):
-        with pcols[i]:
-            if st.button(f, key=f"fp_{f}", use_container_width=True):
-                st.session_state.feed_filter = f
-                st.rerun()
 
     # ── Auto tick ──────────────────────────────────────────────────────────────
     if not st.session_state.feed_paused:
