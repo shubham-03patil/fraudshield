@@ -610,10 +610,11 @@ def page_command_center():
             pts  = [(i * step, H - feed_scores[i] * H) for i in range(n)]
             pt_str   = " ".join(f"{x:.1f},{y:.1f}" for x, y in pts)
             fill_str = f"0,{H} " + pt_str + f" {W},{H}"
-            dots = "".join(
-                f'<circle cx="{x:.1f}" cy="{y:.1f}" r="3" fill="{get_risk_tier(feed_scores[i])["color"]}"/>'
-                for i, (x, y) in enumerate(pts)
-            )
+            dot_list = []
+            for i, (x, y) in enumerate(pts):
+                dot_color = get_risk_tier(feed_scores[i])["color"]
+                dot_list.append(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="3" fill="{dot_color}"/>')
+            dots = "".join(dot_list)
             crit_y = H - 0.80 * H
             high_y = H - 0.60 * H
             med_y  = H - 0.40 * H
@@ -945,7 +946,7 @@ def page_case_manager():
                 </div>
               </div>
               <div style="font-size:0.65rem;color:#3a5a7c;">RF:{v_icons[0]} LR:{v_icons[1]} SVM:{v_icons[2]} · {flags}</div>
-              {f'<div style="margin-top:0.5rem;background:#070b14;border-left:3px solid {color};border-radius:6px;padding:0.5rem 0.75rem;font-size:0.72rem;color:#8ba4c8;">📝 {notes}</div>' if notes else ""}
+              {('<div style="margin-top:0.5rem;background:#070b14;border-left:3px solid ' + color + ';border-radius:6px;padding:0.5rem 0.75rem;font-size:0.72rem;color:#8ba4c8;">📝 ' + notes + '</div>') if notes else ""}
             </div>""", unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -993,26 +994,31 @@ def page_rules_engine():
         }
         action_labels = {"block": "Auto Block 🚨", "escalate": "Escalate ⚠️"}
         for i, rule in enumerate(st.session_state.rules):
-            enabled   = rule.get("enabled", True)
-            rtype     = rule.get("type","")
-            rval      = rule.get("value","")
-            raction   = rule.get("action","block")
-            cond_label= f"{type_labels.get(rtype, rtype)} {rval if rtype not in ['no_chip_no_pin','unknown_merchant'] else ''}"
-            act_label = action_labels.get(raction, "Auto Block 🚨")
-            act_color = "#ef4444" if raction == "block" else "#f59e0b"
+            enabled    = rule.get("enabled", True)
+            rtype      = rule.get("type","")
+            rval       = rule.get("value","")
+            raction    = rule.get("action","block")
+            hits       = rule.get("hits", 0)
+            cond_label = f"{type_labels.get(rtype, rtype)} {rval if rtype not in ['no_chip_no_pin','unknown_merchant'] else ''}"
+            act_label  = action_labels.get(raction, "Auto Block 🚨")
+            act_color  = "#ef4444" if raction == "block" else "#f59e0b"
+            card_border= "#3b82f6" if enabled else "#1a2a42"
+            name_color = "#c8d8f0" if enabled else "#3a5a7c"
+            status_color= "#3b82f6" if enabled else "#1e3050"
+            status_text = "● Active" if enabled else "○ Disabled"
 
             rc1, rc2, rc3 = st.columns([3, 1, 1])
             with rc1:
                 st.markdown(f"""
-                <div style="background:#070b14;border:1px solid {'#3b82f6' if enabled else '#1a2a42'};border-radius:10px;padding:0.6rem 1rem;">
+                <div style="background:#070b14;border:1px solid {card_border};border-radius:10px;padding:0.6rem 1rem;">
                   <div style="display:flex;justify-content:space-between;align-items:center;">
-                    <div style="font-size:0.82rem;font-weight:700;color:{'#c8d8f0' if enabled else '#3a5a7c'};">🔒 {rule['name']}</div>
+                    <div style="font-size:0.82rem;font-weight:700;color:{name_color};">🔒 {rule['name']}</div>
                     <span style="font-size:0.62rem;font-weight:700;color:{act_color};background:rgba(239,68,68,0.1);padding:2px 8px;border-radius:20px;">{act_label}</span>
                   </div>
                   <div style="font-size:0.68rem;color:#3a5a7c;margin-top:3px;">IF {cond_label}</div>
                   <div style="display:flex;justify-content:space-between;margin-top:2px;">
-                    <span style="font-size:0.62rem;color:{'#3b82f6' if enabled else '#1e3050'};">{'● Active' if enabled else '○ Disabled'}</span>
-                    <span style="font-size:0.62rem;color:#f59e0b;font-family:'JetBrains Mono',monospace;">⚡ {rule.get('hits',0)} triggered</span>
+                    <span style="font-size:0.62rem;color:{status_color};">{status_text}</span>
+                    <span style="font-size:0.62rem;color:#f59e0b;font-family:'JetBrains Mono',monospace;">⚡ {hits} triggered</span>
                   </div>
                 </div>""", unsafe_allow_html=True)
             with rc2:
