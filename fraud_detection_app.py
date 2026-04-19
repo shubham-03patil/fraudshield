@@ -200,10 +200,27 @@ button[aria-label="Open sidebar"]{display:flex!important;}
 .coming-soon{background:linear-gradient(145deg,#0c1628,#091020);border:1px dashed #1a2a42;border-radius:16px;padding:3rem;text-align:center;}
 
 /* Buttons */
-.stButton>button{background:linear-gradient(135deg,#1d4ed8,#3b82f6)!important;color:white!important;border:none!important;border-radius:10px!important;font-family:'Syne',sans-serif!important;font-weight:700!important;font-size:0.85rem!important;padding:0.6rem 1.25rem!important;transition:all 0.2s!important;}
+.stButton>button{background:linear-gradient(135deg,#1d4ed8,#3b82f6)!important;color:white!important;border:none!important;border-radius:10px!important;font-family:'Syne',sans-serif!important;font-weight:700!important;font-size:0.82rem!important;padding:0.55rem 1rem!important;transition:all 0.2s!important;letter-spacing:0.02em!important;}
 .stButton>button:hover{transform:translateY(-1px)!important;box-shadow:0 6px 20px rgba(59,130,246,0.35)!important;}
+.stButton>button[kind="secondary"]{background:#0c1628!important;border:1px solid #1a2a42!important;}
+.stButton>button[kind="secondary"]:hover{background:#111d2e!important;border-color:#3b82f6!important;}
 .stSelectbox>div>div{background:#070b14!important;border:1px solid #1a2a42!important;border-radius:10px!important;color:#e8edf5!important;}
 .stSelectbox label{color:#3a5a7c!important;font-size:0.72rem!important;font-weight:700!important;text-transform:uppercase!important;letter-spacing:0.08em!important;}
+.stTextInput>div>div>input{background:#070b14!important;border:1px solid #1a2a42!important;border-radius:10px!important;color:#e8edf5!important;font-family:'Syne',sans-serif!important;font-size:0.85rem!important;padding:0.6rem 1rem!important;}
+.stTextInput>div>div>input:focus{border-color:#3b82f6!important;box-shadow:0 0 0 2px rgba(59,130,246,0.15)!important;}
+.stTextInput>div>div>input::placeholder{color:#2a3a52!important;}
+.stTextInput label{color:#3a5a7c!important;font-size:0.72rem!important;}
+.stNumberInput>div>div>input{background:#070b14!important;border:1px solid #1a2a42!important;border-radius:10px!important;color:#e8edf5!important;font-family:'JetBrains Mono',monospace!important;}
+.stSlider>div>div>div>div{background:#3b82f6!important;}
+.stSlider .stMarkdown{color:#3a5a7c!important;font-size:0.72rem!important;}
+/* Divider */
+hr{border-color:#111d2e!important;}
+/* Alert queue note input */
+.stTextInput>div{margin-bottom:0!important;}
+/* Cleaner spacing */
+.block-container{padding-top:1.5rem!important;padding-bottom:2rem!important;}
+[data-testid="stSidebar"] .stButton>button{background:#0c1628!important;border:1px solid #1a2a42!important;color:#8ba4c8!important;font-size:0.8rem!important;text-align:left!important;padding:0.55rem 0.75rem!important;}
+[data-testid="stSidebar"] .stButton>button:hover{background:#111d2e!important;color:#c8d8f0!important;border-color:#3b82f6!important;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -366,10 +383,14 @@ def show_sidebar():
 
         st.markdown('<div class="nav-label">Navigation</div>', unsafe_allow_html=True)
         for icon, name, desc in pages:
+            is_active = st.session_state.page == name
             label = f"{icon}  {name}"
             if name == "Alert Queue" and alert_count > 0:
                 label = f"{icon}  {name}  🔴"
-            if st.button(label, key=f"nav_{name}", help=desc, use_container_width=True):
+            if is_active:
+                label = "▶  " + label
+            if st.button(label, key=f"nav_{name}", help=desc, use_container_width=True,
+                         type="primary" if is_active else "secondary"):
                 st.session_state.page = name
                 st.rerun()
 
@@ -753,31 +774,33 @@ def page_alert_queue():
             v_icons= ["🔴" if v else "🟢" for v in votes]
 
             with st.container():
+                rule_html = ('<div style="margin-top:0.5rem;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);border-radius:6px;padding:0.35rem 0.75rem;font-size:0.65rem;color:#f59e0b;">🔒 Rule triggered: ' + txn.get("rule_triggered","") + '</div>') if txn.get("rule_triggered") else ""
                 st.markdown(f"""
-                <div style="background:{bg};border:1px solid {border};border-radius:14px;padding:1.25rem;margin-bottom:1rem;">
-                  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;">
+                <div style="background:{bg};border:1px solid {border};border-radius:14px;padding:1.25rem;margin-bottom:0.5rem;">
+                  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.6rem;">
                     <div style="display:flex;align-items:center;gap:10px;">
-                      <span style="font-size:1.3rem;">{t['icon']}</span>
+                      <div style="width:36px;height:36px;background:{bg};border:1px solid {border};border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.1rem;flex-shrink:0;">{t['icon']}</div>
                       <div>
-                        <div style="font-size:0.95rem;font-weight:800;color:#f0f4ff;">{txn['merchant']}</div>
-                        <div style="font-size:0.65rem;color:#3a5a7c;font-family:'JetBrains Mono',monospace;">{txn['id']} · {elapsed}</div>
+                        <div style="font-size:0.92rem;font-weight:800;color:#f0f4ff;">{txn['merchant']}</div>
+                        <div style="font-size:0.62rem;color:#3a5a7c;font-family:'JetBrains Mono',monospace;margin-top:1px;">{txn['id']} · 🕐 {elapsed}</div>
                       </div>
                     </div>
                     <div style="text-align:right;">
-                      <div style="font-size:1.1rem;font-weight:800;color:#e0e8f5;font-family:'JetBrains Mono',monospace;">{txn['amount']}</div>
-                      <div style="font-size:0.72rem;font-weight:700;color:{color};">{t['tier']} RISK · {int(txn['score']*100)}%</div>
+                      <div style="font-size:1rem;font-weight:800;color:#e0e8f5;font-family:'JetBrains Mono',monospace;">{txn['amount']}</div>
+                      <div style="font-size:0.7rem;font-weight:700;color:{color};margin-top:2px;">{t['tier']} · {int(txn['score']*100)}% risk</div>
                     </div>
                   </div>
-                  <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:0.75rem;">
-                    <span style="font-size:0.65rem;color:#3a5a7c;">💳 {card}</span>
-                    <span style="font-size:0.65rem;color:#3a5a7c;">📍 {city}</span>
-                    <span style="font-size:0.65rem;color:#3a5a7c;">RF:{v_icons[0]} LR:{v_icons[1]} SVM:{v_icons[2]}</span>
-                    <span style="font-size:0.65rem;color:#3a5a7c;">⚠️ {flags}</span>
+                  <div style="display:flex;gap:10px;flex-wrap:wrap;padding:0.5rem 0;border-top:1px solid rgba(255,255,255,0.04);border-bottom:1px solid rgba(255,255,255,0.04);">
+                    <span style="font-size:0.63rem;color:#3a5a7c;background:#070b14;padding:2px 8px;border-radius:20px;border:1px solid #111d2e;">💳 {card}</span>
+                    <span style="font-size:0.63rem;color:#3a5a7c;background:#070b14;padding:2px 8px;border-radius:20px;border:1px solid #111d2e;">📍 {city}</span>
+                    <span style="font-size:0.63rem;color:#3a5a7c;background:#070b14;padding:2px 8px;border-radius:20px;border:1px solid #111d2e;">RF:{v_icons[0]} LR:{v_icons[1]} SVM:{v_icons[2]}</span>
+                    <span style="font-size:0.63rem;color:{color};background:{bg};padding:2px 8px;border-radius:20px;border:1px solid {border};">⚠️ {flags}</span>
                   </div>
+                  {rule_html}
                 </div>""", unsafe_allow_html=True)
 
                 # Note input + action buttons
-                note = st.text_input("Analyst note", placeholder="Add decision reason e.g. Customer confirmed · Card stolen · Escalating for senior review...", key=f"note_{txn['id']}", label_visibility="collapsed")
+                note = st.text_input("Analyst note", placeholder="Reason: Customer confirmed · Card stolen · Escalating for review...", key=f"note_{txn['id']}", label_visibility="collapsed")
                 b1, b2, b3 = st.columns(3)
                 with b1:
                     if st.button(f"✅ Approve", key=f"approve_{txn['id']}_{i}", use_container_width=True):
@@ -880,15 +903,17 @@ def page_case_manager():
         </div>""", unsafe_allow_html=True)
     else:
         for case in display_cases[:20]:
-            t          = case["tier"]
-            color      = t["color"]
-            bg         = t["bg"]
-            border     = t["border"]
-            status     = case.get("case_status","Resolved")
-            decision   = case.get("status","—")
-            analyst    = case.get("analyst","System")
-            resolved_at= case.get("resolved_at","—")
-            notes      = case.get("notes","")
+            t           = case["tier"]
+            color       = t["color"]
+            bg          = t["bg"]
+            border      = t["border"]
+            status      = case.get("case_status","Resolved")
+            decision    = case.get("status","—")
+            analyst     = case.get("analyst","System")
+            resolved_at = case.get("resolved_at","—")
+            notes       = case.get("notes","")
+            d_color     = "#10b981" if "Approv" in decision else "#ef4444" if "Block" in decision else "#f59e0b" if "Escal" in decision else color
+            a_color     = "#3b82f6" if analyst != "System" else "#3a5a7c"
             city       = get_city(case.get("dist_home", 5))
             votes      = case.get("votes", [False,False,False])
             v_icons    = ["🔴" if v else "🟢" for v in votes]
@@ -913,11 +938,11 @@ def page_case_manager():
               <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:0.5rem;margin-bottom:0.6rem;">
                 <div style="background:#070b14;border:1px solid #111d2e;border-radius:8px;padding:0.5rem;text-align:center;">
                   <div style="font-size:0.6rem;color:#3a5a7c;text-transform:uppercase;margin-bottom:3px;">Decision</div>
-                  <div style="font-size:0.75rem;font-weight:700;color:{'#10b981' if 'Approv' in decision else '#ef4444' if 'Block' in decision else '#f59e0b' if 'Escal' in decision else color};">{decision}</div>
+                  <div style="font-size:0.75rem;font-weight:700;color:{d_color};">{decision}</div>
                 </div>
                 <div style="background:#070b14;border:1px solid #111d2e;border-radius:8px;padding:0.5rem;text-align:center;">
                   <div style="font-size:0.6rem;color:#3a5a7c;text-transform:uppercase;margin-bottom:3px;">Analyst</div>
-                  <div style="font-size:0.75rem;font-weight:700;color:#c8d8f0;">{analyst}</div>
+                  <div style="font-size:0.75rem;font-weight:700;color:{a_color};">{analyst}</div>
                 </div>
                 <div style="background:#070b14;border:1px solid #111d2e;border-radius:8px;padding:0.5rem;text-align:center;">
                   <div style="font-size:0.6rem;color:#3a5a7c;text-transform:uppercase;margin-bottom:3px;">Time</div>
@@ -1153,21 +1178,22 @@ def page_audit_log():
         </div>""", unsafe_allow_html=True)
 
         for entry in log[:50]:
-            t          = entry["tier"]
-            color      = t["color"]
-            decision   = entry.get("decision","—")
-            analyst    = entry.get("analyst","System")
-            resolved_at= entry.get("resolved_at","—")
-            d_color    = "#ef4444" if "Block" in decision else ("#10b981" if "Approv" in decision else "#f59e0b")
-            a_color    = "#3a5a7c" if analyst == "System" else "#3b82f6"
+            t           = entry["tier"]
+            color       = t["color"]
+            decision    = entry.get("decision","—")
+            analyst     = entry.get("analyst","System")
+            resolved_at = entry.get("resolved_at","—")
+            d_color     = "#10b981" if "Approv" in decision else "#ef4444" if "Block" in decision else "#f59e0b"
+            a_color     = "#3b82f6" if analyst != "System" else "#3a5a7c"
 
+            row_bg = "rgba(255,255,255,0.015)" if log.index(entry) % 2 == 0 else "transparent"
             st.markdown(f"""
-            <div style="display:grid;grid-template-columns:1fr 1.5fr 1fr 1fr 1fr 1fr;padding:0.55rem 0.75rem;border-bottom:1px solid #0a1020;align-items:center;">
+            <div style="display:grid;grid-template-columns:1fr 1.5fr 1fr 1fr 1fr 1fr;padding:0.55rem 0.75rem;border-bottom:1px solid #0a1020;align-items:center;background:{row_bg};border-radius:6px;">
               <span style="font-family:'JetBrains Mono',monospace;font-size:0.7rem;color:#3a5a7c;">{entry['id']}</span>
               <span style="font-size:0.75rem;font-weight:600;color:#c8d8f0;">{entry['merchant']}</span>
               <span style="font-family:'JetBrains Mono',monospace;font-size:0.75rem;color:#e0e8f5;">{entry['amount']}</span>
               <span style="font-size:0.7rem;font-weight:700;color:{color};">{t['tier']} {int(entry['score']*100)}%</span>
-              <span style="font-size:0.72rem;font-weight:700;color:{d_color};">{decision}</span>
+              <span style="padding:2px 8px;border-radius:20px;font-size:0.68rem;font-weight:700;background:{'rgba(16,185,129,0.1)' if 'Approv' in decision else 'rgba(239,68,68,0.1)' if 'Block' in decision else 'rgba(245,158,11,0.1)'};color:{d_color};">{decision}</span>
               <span style="font-size:0.65rem;color:{a_color};">{analyst} · {resolved_at}</span>
             </div>""", unsafe_allow_html=True)
 
